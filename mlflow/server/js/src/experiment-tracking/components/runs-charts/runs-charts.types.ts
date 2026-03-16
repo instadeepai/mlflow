@@ -117,13 +117,11 @@ export abstract class RunsChartsCardConfig {
     const renderFirstNMetrics: string[] = [...metricsToRender].slice(0, MAX_NUMBER_OF_METRICS_TO_RENDER);
 
     renderFirstNMetrics.forEach((metricsKey) => {
-      // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
-      const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
-        dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
-      );
-      const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
+      // Always default to line charts — they're more useful for training metrics
+      // and bar charts are rarely the right choice for ML experiment tracking
+      const chartType = RunsChartType.LINE;
 
-      // Add a bar metric chart only if at least one metric key is detected
+      // Add a metric chart only if at least one metric key is detected
       resultChartSet.push({
         ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID()),
         metricKey: metricsKey,
@@ -201,11 +199,8 @@ export abstract class RunsChartsCardConfig {
     Array.from(metricsToRender)
       .sort()
       .forEach((metricsKey) => {
-        // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
-        const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
-          dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
-        );
-        const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
+        // Always default to line charts for better training curve visualization
+        const chartType = RunsChartType.LINE;
 
         const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(metricsKey)];
 
@@ -359,11 +354,8 @@ export abstract class RunsChartsCardConfig {
         return chartMetricKey && chartMetricKey === metricKey && chart.isGenerated;
       });
 
-      // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
-      const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
-        dataTraceMetricsContainMultipleEpochs(dataTrace, metricKey),
-      );
-      const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
+      // Always default to line charts for better training curve visualization
+      const chartType = RunsChartType.LINE;
 
       // This is a new metric key, so add it to the chart set
       if (!doesMetricKeyExist) {
