@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: yferc/mlflow
+  IMAGE_NAME: y-ferchichi/mlflow
 
 jobs:
   build-and-push:
