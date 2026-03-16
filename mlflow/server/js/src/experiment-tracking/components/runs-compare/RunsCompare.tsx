@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import type { MetricEntitiesByName, ChartSectionConfig, ImageEntity } from '../../types';
 import type { KeyValueEntity } from '../../../common/types';
 import { RunsChartsCardConfig } from '../runs-charts/runs-charts.types';
-import type { RunsChartType } from '../runs-charts/runs-charts.types';
+import { RunsChartType } from '../runs-charts/runs-charts.types';
 import { type SerializedRunsChartsCardConfigCard } from '../runs-charts/runs-charts.types';
 import { RunsChartsConfigureModal } from '../runs-charts/components/RunsChartsConfigureModal';
 import { createEmptyChartCardPredicate, type RunsChartsRunData } from '../runs-charts/components/RunsCharts.common';
@@ -265,6 +265,26 @@ const RunsCompareImpl = ({
       );
     }
   }, [compareRunCharts, compareRunSections, primaryMetricKey, chartData, updateChartsUIState]);
+
+  // Upgrade any cached BAR charts to LINE charts for better training curve visualization
+  useEffect(() => {
+    if (!compareRunCharts) return;
+    const hasBarCharts = compareRunCharts.some((chart) => chart.type === RunsChartType.BAR);
+    if (hasBarCharts) {
+      updateChartsUIState((current) => ({
+        ...current,
+        compareRunCharts: current.compareRunCharts?.map((chart) =>
+          chart.type === RunsChartType.BAR && chart.isGenerated
+            ? {
+                ...RunsChartsCardConfig.getEmptyChartCardByType(RunsChartType.LINE, chart.isGenerated, chart.uuid, chart.metricSectionId),
+                metricKey: (chart as any).metricKey,
+                deleted: chart.deleted,
+              }
+            : chart,
+        ),
+      }));
+    }
+  }, [compareRunCharts, updateChartsUIState]);
 
   /**
    * When chartData changes, we need to update the RunCharts with the latest charts
