@@ -17,6 +17,9 @@ RUN yarn build
 # Stage 2: Base MLflow image with optimized UI swapped in
 FROM ghcr.io/mlflow/mlflow:v${MLFLOW_VERSION}
 
+# Install PostgreSQL driver
+RUN pip install --no-cache-dir psycopg2-binary
+
 # Replace the default React UI build with our optimized version
 # Optimizations:
 #   - Chart card pagination (50 per page) to prevent DOM overload with 3000+ metrics
