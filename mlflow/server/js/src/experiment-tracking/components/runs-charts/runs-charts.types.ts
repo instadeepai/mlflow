@@ -26,12 +26,19 @@ export enum RunsChartType {
   IMAGE = 'IMAGE',
 }
 
+const MIN_NUMBER_OF_STEP_FOR_LINE_COMPARISON = 1;
+
 /**
  * Simple interface corresponding to `RunsChartsCardConfig`.
  * Its role is to distinguish between stateful class instance and a simple POJO,
  * it is meant to be contained in a serializable, persisted state.
  */
 export type SerializedRunsChartsCardConfigCard = RunsChartsCardConfig;
+
+// A function to iterate across run/group data traces and determine if any metric has multiple epochs.
+// This helps to decide if we should seed the line chart or a bar chart.
+const dataTraceMetricsContainMultipleEpochs = (dataTrace: RunsChartsRunData, metricKey: string): boolean =>
+  Boolean(dataTrace.metrics?.[metricKey]?.step >= MIN_NUMBER_OF_STEP_FOR_LINE_COMPARISON);
 
 /**
  * Main class used for represent a single configured chart card with its type, configuration options etc.
@@ -110,15 +117,17 @@ export abstract class RunsChartsCardConfig {
     const renderFirstNMetrics: string[] = [...metricsToRender].slice(0, MAX_NUMBER_OF_METRICS_TO_RENDER);
 
     renderFirstNMetrics.forEach((metricsKey) => {
-      // Always default to line charts — they're more useful for training metrics
-      // and bar charts are rarely the right choice for ML experiment tracking
-      const chartType = RunsChartType.LINE;
+      // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
+      const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
+        dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
+      );
+      const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
 
       // Add a metric chart only if at least one metric key is detected
       resultChartSet.push({
         ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID()),
         metricKey: metricsKey,
-      } as RunsChartsLineCardConfig);
+      } as RunsChartsBarCardConfig);
     });
 
     // If no other charts exist, show empty parallel coordinates plot
@@ -192,8 +201,11 @@ export abstract class RunsChartsCardConfig {
     Array.from(metricsToRender)
       .sort()
       .forEach((metricsKey) => {
-        // Always default to line charts for better training curve visualization
-        const chartType = RunsChartType.LINE;
+        // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
+        const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
+          dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
+        );
+        const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
 
         const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(metricsKey)];
 
@@ -202,7 +214,7 @@ export abstract class RunsChartsCardConfig {
           ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
           metricKey: metricsKey,
           ...(metricsKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
-        } as RunsChartsLineCardConfig);
+        } as RunsChartsBarCardConfig);
       });
 
     Array.from(imagesToRender)
@@ -347,8 +359,11 @@ export abstract class RunsChartsCardConfig {
         return chartMetricKey && chartMetricKey === metricKey && chart.isGenerated;
       });
 
-      // Always default to line charts for better training curve visualization
-      const chartType = RunsChartType.LINE;
+      // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
+      const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
+        dataTraceMetricsContainMultipleEpochs(dataTrace, metricKey),
+      );
+      const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
 
       // This is a new metric key, so add it to the chart set
       if (!doesMetricKeyExist) {
@@ -371,7 +386,7 @@ export abstract class RunsChartsCardConfig {
           ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
           metricKey: metricKey,
           ...(metricKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
-        } as RunsChartsLineCardConfig;
+        } as RunsChartsBarCardConfig;
 
         if (isSectionReordered) {
           // If the section has been reordered, then append to the end of the section
