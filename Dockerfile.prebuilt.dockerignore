@@ -1,0 +1,10 @@
+# Only include the pre-built UI assets
+.git
+docs
+tests
+examples
+dev
+__pycache__
+*.pyc
+mlflow/server/js/node_modules
+mlflow/server/js/coverage

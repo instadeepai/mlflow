@@ -26,19 +26,12 @@ export enum RunsChartType {
   IMAGE = 'IMAGE',
 }
 
-const MIN_NUMBER_OF_STEP_FOR_LINE_COMPARISON = 1;
-
 /**
  * Simple interface corresponding to `RunsChartsCardConfig`.
  * Its role is to distinguish between stateful class instance and a simple POJO,
  * it is meant to be contained in a serializable, persisted state.
  */
 export type SerializedRunsChartsCardConfigCard = RunsChartsCardConfig;
-
-// A function to iterate across run/group data traces and determine if any metric has multiple epochs.
-// This helps to decide if we should seed the line chart or a bar chart.
-const dataTraceMetricsContainMultipleEpochs = (dataTrace: RunsChartsRunData, metricKey: string): boolean =>
-  Boolean(dataTrace.metrics?.[metricKey]?.step >= MIN_NUMBER_OF_STEP_FOR_LINE_COMPARISON);
 
 /**
  * Main class used for represent a single configured chart card with its type, configuration options etc.
@@ -125,7 +118,7 @@ export abstract class RunsChartsCardConfig {
       resultChartSet.push({
         ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID()),
         metricKey: metricsKey,
-      } as RunsChartsBarCardConfig);
+      } as RunsChartsLineCardConfig);
     });
 
     // If no other charts exist, show empty parallel coordinates plot
@@ -209,7 +202,7 @@ export abstract class RunsChartsCardConfig {
           ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
           metricKey: metricsKey,
           ...(metricsKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
-        } as RunsChartsBarCardConfig);
+        } as RunsChartsLineCardConfig);
       });
 
     Array.from(imagesToRender)
@@ -378,7 +371,7 @@ export abstract class RunsChartsCardConfig {
           ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
           metricKey: metricKey,
           ...(metricKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
-        } as RunsChartsBarCardConfig;
+        } as RunsChartsLineCardConfig;
 
         if (isSectionReordered) {
           // If the section has been reordered, then append to the end of the section

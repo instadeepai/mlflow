@@ -1,0 +1,15 @@
+# Dockerfile-specific dockerignore — overrides the repo's .dockerignore
+# We only need the mlflow/server/js directory for the UI build
+.git
+docs
+tests
+examples
+mlruns
+dev
+__pycache__
+*.pyc
+
+# Exclude JS build artifacts and dependencies (will be rebuilt)
+mlflow/server/js/node_modules
+mlflow/server/js/build
+mlflow/server/js/coverage

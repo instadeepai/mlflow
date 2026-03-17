@@ -1,0 +1,22 @@
+ARG MLFLOW_VERSION=3.10.1
+
+# Quick Dockerfile: uses a pre-built UI (no Node.js build step)
+# Usage:
+#   1. Build the UI locally: pushd mlflow/server/js && yarn install && yarn build; popd
+#   2. Build the image:      docker build -f Dockerfile.prebuilt -t mlflow-optimized .
+FROM ghcr.io/mlflow/mlflow:v${MLFLOW_VERSION}
+
+# Find the mlflow JS build path dynamically (avoids hardcoding Python version)
+RUN MLFLOW_DIR=$(python -c "import mlflow, os; print(os.path.join(os.path.dirname(mlflow.__file__), 'server', 'js', 'build'))") && \
+    rm -rf "$MLFLOW_DIR" && \
+    mkdir -p "$(dirname "$MLFLOW_DIR")" && \
+    echo "$MLFLOW_DIR" > /tmp/mlflow_js_build_path
+
+COPY mlflow/server/js/build /tmp/mlflow_ui_build
+
+RUN MLFLOW_DIR=$(cat /tmp/mlflow_js_build_path) && \
+    mv /tmp/mlflow_ui_build "$MLFLOW_DIR" && \
+    rm /tmp/mlflow_js_build_path
+
+EXPOSE 5000
+CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
