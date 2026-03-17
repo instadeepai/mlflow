@@ -5,7 +5,7 @@ import { MetricEntitiesByName } from '../../../types';
 import { compact, first, isEmpty, uniq } from 'lodash';
 import type { RunsChartsUIConfigurationSetter } from '../../../components/runs-charts/hooks/useRunsChartsUIConfiguration';
 import type { RunsChartsCardConfig } from '../../../components/runs-charts/runs-charts.types';
-import { RunsChartType } from '../../../components/runs-charts/runs-charts.types';
+import { RunsChartType, RunsChartsBarCardConfig } from '../../../components/runs-charts/runs-charts.types';
 import type { ExperimentRunsChartsUIConfiguration } from '../../../components/experiment-page/models/ExperimentPageUIState';
 
 type UpdateChartStateAction = { type: 'UPDATE'; stateSetter: RunsChartsUIConfigurationSetter };
@@ -28,11 +28,11 @@ const getExperimentEvalRunsPageChartSetup = (allMetricKeys: string[]) => {
   const firstNameSegments = compact(
     uniq(allMetricKeys.map((key) => (key.includes('/') ? first(key.split('/')) : null))),
   );
-  const compareRunCharts: RunsChartsCardConfig[] = allMetricKeys.map((key) => {
+  const compareRunCharts: RunsChartsBarCardConfig[] = allMetricKeys.map((key) => {
     const sectionKey = key.includes('/') ? first(key.split('/')) : null;
     return {
       deleted: false,
-      type: RunsChartType.LINE,
+      type: RunsChartType.BAR,
       uuid: `autogen-${key}`,
       metricSectionId: sectionKey ? `autogen-${sectionKey}` : 'default',
       isGenerated: true,
@@ -127,16 +127,7 @@ const chartsUIStateReducer = (state: ExperimentEvaluationRunsChartsUIConfigurati
   }
   if (action.type === 'INITIALIZE') {
     if (action.initialConfig) {
-      // Upgrade any cached BAR charts to LINE for better training curve visualization
-      const upgraded = {
-        ...action.initialConfig,
-        compareRunCharts: action.initialConfig.compareRunCharts?.map((chart) =>
-          chart.type === RunsChartType.BAR && chart.isGenerated
-            ? { ...chart, type: RunsChartType.LINE as const }
-            : chart,
-        ),
-      };
-      return upgraded;
+      return action.initialConfig;
     }
   }
   return state;

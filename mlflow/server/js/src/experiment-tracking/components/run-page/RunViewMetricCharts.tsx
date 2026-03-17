@@ -10,7 +10,7 @@ import type { KeyValueEntity } from '../../../common/types';
 
 import { RunsChartsTooltipWrapper } from '../runs-charts/hooks/useRunsChartsTooltip';
 import { RunViewChartTooltipBody } from './RunViewChartTooltipBody';
-import { RunsChartType, RunsChartsCardConfig, RunsChartsBarCardConfig } from '../runs-charts/runs-charts.types';
+import { RunsChartType, RunsChartsCardConfig } from '../runs-charts/runs-charts.types';
 import type { RunsChartsRunData } from '../runs-charts/components/RunsCharts.common';
 import { RunsChartsLineChartXAxisType } from '../runs-charts/components/RunsCharts.common';
 import type { ExperimentRunsChartsUIConfiguration } from '../experiment-page/models/ExperimentPageUIState';
@@ -165,26 +165,6 @@ const RunViewMetricChartsImpl = ({
       }));
     }
   }, [compareRunCharts, compareRunSections, chartData, mode, updateChartsUIState]);
-
-  // Upgrade any cached BAR charts to LINE charts
-  useEffect(() => {
-    if (!compareRunCharts) return;
-    const hasBarCharts = compareRunCharts.some((chart) => chart.type === RunsChartType.BAR && chart.isGenerated);
-    if (hasBarCharts) {
-      updateChartsUIState((current) => ({
-        ...current,
-        compareRunCharts: current.compareRunCharts?.map((chart) =>
-          chart.type === RunsChartType.BAR && chart.isGenerated
-            ? {
-                ...RunsChartsCardConfig.getEmptyChartCardByType(RunsChartType.LINE, chart.isGenerated, chart.uuid, chart.metricSectionId),
-                metricKey: (chart as RunsChartsBarCardConfig).metricKey,
-                deleted: chart.deleted,
-              }
-            : chart,
-        ),
-      }));
-    }
-  }, [compareRunCharts, updateChartsUIState]);
 
   /**
    * Update charts with the latest metrics if new are found
