@@ -151,7 +151,11 @@ const saveDataToStorage = async (
   storeIdentifier: string,
   dataToPersist: ExperimentEvaluationRunsChartsUIConfiguration,
 ) => {
-  localStorage.setItem(createLocalStorageKey(storeIdentifier), JSON.stringify(dataToPersist));
+  try {
+    localStorage.setItem(createLocalStorageKey(storeIdentifier), JSON.stringify(dataToPersist));
+  } catch {
+    // Ignore QuotaExceededError
+  }
 };
 
 /**
