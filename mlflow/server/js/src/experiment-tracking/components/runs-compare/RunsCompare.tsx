@@ -219,7 +219,7 @@ const RunsCompareImpl = ({
   const chartData: RunsChartsRunData[] = useMemo(() => {
     if (!groupBy) {
       return comparedRuns
-        .filter((run) => run.runInfo)
+        .filter((run) => run.runInfo && !run.hidden)
         .map<RunsChartsRunData>((run) =>
           createRunDataTrace(
             run,
@@ -233,7 +233,7 @@ const RunsCompareImpl = ({
     }
 
     const groupChartDataEntries = comparedRuns
-      .filter((run) => run.groupParentInfo)
+      .filter((run) => run.groupParentInfo && !run.hidden)
       .map<RunsChartsRunData>((group) => createGroupDataTrace(group, getRunColor(group.groupParentInfo?.groupId)));
 
     return groupChartDataEntries;
