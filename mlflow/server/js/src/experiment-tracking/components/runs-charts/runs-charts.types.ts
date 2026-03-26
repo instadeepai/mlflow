@@ -158,19 +158,14 @@ export abstract class RunsChartsCardConfig {
     useParallelCoordinatesChart = false,
     enabledSectionNames = [MLFLOW_MODEL_METRIC_NAME, MLFLOW_SYSTEM_METRIC_NAME],
     filterMetricNames,
-    maxChartsToRender,
   }: {
     primaryMetricKey?: string;
     useParallelCoordinatesChart?: boolean;
     runsData: RunsChartsRunData[];
     enabledSectionNames?: string[];
     filterMetricNames?: (metricName: string) => boolean;
-    maxChartsToRender?: number;
   }) {
     const resultChartSet: RunsChartsCardConfig[] = [];
-    // Cap the number of chart configs to prevent browser crashes with 3000+ metrics.
-    // Sections and metric counts are still shown — only chart card creation is capped.
-    const MAX_CHARTS = maxChartsToRender ?? 100;
 
     const allMetricKeys = uniq(runsData.flatMap((run) => Object.keys(run.metrics))).filter((name) => {
       if (!filterMetricNames) {
@@ -204,10 +199,8 @@ export abstract class RunsChartsCardConfig {
     });
 
     const sortedMetrics = Array.from(metricsToRender).sort();
-    // Only create chart configs up to MAX_CHARTS to prevent browser crashes
-    const metricsForCharts = sortedMetrics.slice(0, MAX_CHARTS);
 
-    metricsForCharts.forEach((metricsKey) => {
+    sortedMetrics.forEach((metricsKey) => {
         // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
         const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
           dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
@@ -352,7 +345,6 @@ export abstract class RunsChartsCardConfig {
     });
 
     // Append new charts at the end instead of alphabetically
-    const MAX_CHARTS_UPDATE = 100;
     metricsToRender.forEach((metricKey) => {
       // Check if metricKey exists in the current chart set
       const doesMetricKeyExist =
@@ -360,11 +352,6 @@ export abstract class RunsChartsCardConfig {
           const chartMetricKey = (chart as RunsChartsBarCardConfig).metricKey;
           return chartMetricKey ? chartMetricKey === metricKey : false;
         }) >= 0;
-
-      // Don't add more charts beyond the cap
-      if (!doesMetricKeyExist && resultChartSet.length >= MAX_CHARTS_UPDATE) {
-        return;
-      }
 
       // Check if there is a generated chart with metricKey
       const generatedChartIndex = resultChartSet.findIndex((chart) => {
