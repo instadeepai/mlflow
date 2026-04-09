@@ -1,5 +1,5 @@
 import { Button, Empty, useDesignSystemTheme } from '@databricks/design-system';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateRunsChartsUIConfiguration } from '../hooks/useRunsChartsUIConfiguration';
 import type { RunsChartsCardConfig } from '../runs-charts.types';
 import type { RunsChartsRunData } from './RunsCharts.common';
@@ -170,6 +170,10 @@ export const RunsChartsDraggableCardsGridSection = memo(
     }, [cardsConfig, chartRunData, hideEmptyCharts]);
 
     const [visibleCount, setVisibleCount] = useState(CHARTS_PER_PAGE);
+    // Reset pagination when the card list changes (e.g., switching experiments)
+    useEffect(() => {
+      setVisibleCount(CHARTS_PER_PAGE);
+    }, [allFilteredCards.length]);
     const cardsToRender = useMemo(() => {
       return allFilteredCards.slice(0, visibleCount);
     }, [allFilteredCards, visibleCount]);
