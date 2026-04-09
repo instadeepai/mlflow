@@ -123,7 +123,7 @@ export abstract class RunsChartsCardConfig {
       );
       const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
 
-      // Add a bar metric chart only if at least one metric key is detected
+      // Add a metric chart only if at least one metric key is detected
       resultChartSet.push({
         ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID()),
         metricKey: metricsKey,
@@ -198,9 +198,9 @@ export abstract class RunsChartsCardConfig {
       }
     });
 
-    Array.from(metricsToRender)
-      .sort()
-      .forEach((metricsKey) => {
+    const sortedMetrics = Array.from(metricsToRender).sort();
+
+    sortedMetrics.forEach((metricsKey) => {
         // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
         const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
           dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
@@ -246,11 +246,14 @@ export abstract class RunsChartsCardConfig {
       ...[MLFLOW_MODEL_METRIC_NAME, MLFLOW_SYSTEM_METRIC_NAME].filter((name) => enabledSectionNames.includes(name)),
     ];
 
+    // Auto-collapse sections when there are many charts to prevent browser performance issues
+    const collapseByDefault = resultChartSet.length > 100;
+
     // Create section configs
     const resultSectionSet: ChartSectionConfig[] = sortedSectionNames.map((sectionName) => ({
       uuid: sectionName2Uuid[sectionName],
       name: sectionName,
-      display: true,
+      display: !collapseByDefault,
       isReordered: false,
       deleted: false,
       isGenerated: true,
