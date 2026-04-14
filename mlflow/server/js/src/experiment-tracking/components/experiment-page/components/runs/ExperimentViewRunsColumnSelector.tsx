@@ -70,6 +70,12 @@ const findMatching = (values: string[], filterQuery: string) =>
   values.filter((v) => v.toLowerCase().includes(filterQuery.toLowerCase()));
 
 /**
+ * Maximum number of items to render per group when no search filter is active.
+ * Prevents DOM bloat with thousands of metrics/params.
+ */
+const MAX_ITEMS_WITHOUT_FILTER = 50;
+
+/**
  * Function dissects given string and wraps the
  * searched query with <strong>...</strong> if found. Used for highlighting search.
  */
@@ -150,13 +156,35 @@ export const ExperimentViewRunsColumnSelector = React.memo(
 
     // This memoized value holds the tree structure generated from
     // attributes, params, metrics and tags. Displays only filtered values.
+    // When no search filter is active, caps each group to MAX_ITEMS_WITHOUT_FILTER
+    // to prevent DOM bloat with thousands of items.
     const treeData = useMemo(() => {
       const result = [];
+      const isFiltering = filter.length > 0;
+      const maxItems = isFiltering ? Infinity : MAX_ITEMS_WITHOUT_FILTER;
 
       const filteredAttributes = findMatching(attributeColumnNames, filter);
       const filteredParams = findMatching(runsData.paramKeyList, filter);
       const filteredMetrics = findMatching(runsData.metricKeyList, filter);
       const filteredTags = findMatching(tagsKeyList, filter);
+
+      const truncateWithHint = (
+        items: { key: string; title: React.ReactNode }[],
+        totalCount: number,
+        groupLabel: string,
+      ) => {
+        if (items.length <= maxItems) return items;
+        const truncated = items.slice(0, maxItems);
+        truncated.push({
+          key: `__hint_${groupLabel}`,
+          title: (
+            <span css={{ color: theme.colors.textSecondary, fontStyle: 'italic' }}>
+              {totalCount - maxItems} more — use search to filter
+            </span>
+          ),
+        });
+        return truncated;
+      };
 
       if (filteredAttributes.length) {
         result.push({
@@ -169,41 +197,44 @@ export const ExperimentViewRunsColumnSelector = React.memo(
         });
       }
       if (filteredMetrics.length) {
+        const metricChildren = filteredMetrics.map((metricKey) => {
+          const customColumnDef = customMetricBehaviorDefs[metricKey];
+          return {
+            key: makeCanonicalSortKey(COLUMN_TYPES.METRICS, metricKey),
+            title: createHighlightedNode(customColumnDef?.displayName ?? metricKey, filter),
+          };
+        });
         result.push({
           key: GROUP_KEY_METRICS,
           title: `Metrics (${filteredMetrics.length})`,
-          children: filteredMetrics.map((metricKey) => {
-            const customColumnDef = customMetricBehaviorDefs[metricKey];
-            return {
-              key: makeCanonicalSortKey(COLUMN_TYPES.METRICS, metricKey),
-              title: createHighlightedNode(customColumnDef?.displayName ?? metricKey, filter),
-            };
-          }),
+          children: truncateWithHint(metricChildren, filteredMetrics.length, 'metrics'),
         });
       }
       if (filteredParams.length) {
+        const paramChildren = filteredParams.map((paramKey) => ({
+          key: makeCanonicalSortKey(COLUMN_TYPES.PARAMS, paramKey),
+          title: createHighlightedNode(paramKey, filter),
+        }));
         result.push({
           key: GROUP_KEY_PARAMS,
           title: `Parameters (${filteredParams.length})`,
-          children: filteredParams.map((paramKey) => ({
-            key: makeCanonicalSortKey(COLUMN_TYPES.PARAMS, paramKey),
-            title: createHighlightedNode(paramKey, filter),
-          })),
+          children: truncateWithHint(paramChildren, filteredParams.length, 'params'),
         });
       }
       if (filteredTags.length) {
+        const tagChildren = filteredTags.map((tagKey) => ({
+          key: makeCanonicalSortKey(COLUMN_TYPES.TAGS, tagKey),
+          title: tagKey,
+        }));
         result.push({
           key: GROUP_KEY_TAGS,
           title: `Tags (${filteredTags.length})`,
-          children: filteredTags.map((tagKey) => ({
-            key: makeCanonicalSortKey(COLUMN_TYPES.TAGS, tagKey),
-            title: tagKey,
-          })),
+          children: truncateWithHint(tagChildren, filteredTags.length, 'tags'),
         });
       }
 
       return result;
-    }, [attributeColumnNames, filter, runsData, tagsKeyList]);
+    }, [attributeColumnNames, filter, runsData, tagsKeyList, theme]);
 
     // This callback toggles entire group of keys
     const toggleGroup = useCallback(
@@ -251,6 +282,8 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     const onCheck = useCallback(
       // We need to recreate antd's tree check callback signature
       (_: any, { node: { key, checked } }: AntdTreeCheckCallback) => {
+        // Ignore clicks on hint nodes (non-selectable "N more — use search" items)
+        if (key.toString().startsWith('__hint_')) return;
         if (isCanonicalSortKeyOfType(key.toString(), GROUP_KEY)) {
           const columnType = extractCanonicalSortKey(key.toString(), GROUP_KEY);
           const canonicalKeysForGroup = canonicalKeyNames[columnType];
