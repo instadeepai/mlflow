@@ -120,6 +120,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     const experimentIds = useExperimentIds();
     const [filter, setFilter] = useState('');
     const { theme } = useDesignSystemTheme();
+    const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
 
     const searchInputRef = useRef<any>(null);
     const scrollableContainerRef = useRef<HTMLDivElement>(null);
@@ -154,32 +155,60 @@ export const ExperimentViewRunsColumnSelector = React.memo(
       [runsData, attributeColumnNames, tagsKeyList],
     );
 
+    const showMore = useCallback((groupLabel: string) => {
+      setVisibleLimits((prev) => ({
+        ...prev,
+        [groupLabel]: (prev[groupLabel] ?? MAX_ITEMS_WITHOUT_FILTER) + MAX_ITEMS_WITHOUT_FILTER,
+      }));
+    }, []);
+
     // This memoized value holds the tree structure generated from
     // attributes, params, metrics and tags. Displays only filtered values.
-    // When no search filter is active, caps each group to MAX_ITEMS_WITHOUT_FILTER
-    // to prevent DOM bloat with thousands of items.
+    // When no search filter is active, caps each group to prevent DOM bloat
+    // with thousands of items. Users can click "Show more" to load the next batch.
     const treeData = useMemo(() => {
       const result = [];
       const isFiltering = filter.length > 0;
-      const maxItems = isFiltering ? Infinity : MAX_ITEMS_WITHOUT_FILTER;
 
       const filteredAttributes = findMatching(attributeColumnNames, filter);
       const filteredParams = findMatching(runsData.paramKeyList, filter);
       const filteredMetrics = findMatching(runsData.metricKeyList, filter);
       const filteredTags = findMatching(tagsKeyList, filter);
 
-      const truncateWithHint = (
+      const truncateWithShowMore = (
         items: { key: string; title: React.ReactNode }[],
         totalCount: number,
         groupLabel: string,
       ) => {
-        if (items.length <= maxItems) return items;
-        const truncated = items.slice(0, maxItems);
+        if (isFiltering) return items;
+        const limit = visibleLimits[groupLabel] ?? MAX_ITEMS_WITHOUT_FILTER;
+        if (items.length <= limit) return items;
+        const remaining = totalCount - limit;
+        const nextBatch = Math.min(remaining, MAX_ITEMS_WITHOUT_FILTER);
+        const truncated = items.slice(0, limit);
         truncated.push({
-          key: `__hint_${groupLabel}`,
+          key: `__show_more_${groupLabel}`,
           title: (
-            <span css={{ color: theme.colors.textSecondary, fontStyle: 'italic' }}>
-              {totalCount - maxItems} more — use search to filter
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                showMore(groupLabel);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  showMore(groupLabel);
+                }
+              }}
+              css={{
+                color: theme.colors.actionTertiaryTextDefault,
+                cursor: 'pointer',
+                '&:hover': { color: theme.colors.actionTertiaryTextHover },
+              }}
+            >
+              Show {nextBatch} more ({remaining} remaining)
             </span>
           ),
         });
@@ -207,7 +236,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
         result.push({
           key: GROUP_KEY_METRICS,
           title: `Metrics (${filteredMetrics.length})`,
-          children: truncateWithHint(metricChildren, filteredMetrics.length, 'metrics'),
+          children: truncateWithShowMore(metricChildren, filteredMetrics.length, 'metrics'),
         });
       }
       if (filteredParams.length) {
@@ -218,7 +247,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
         result.push({
           key: GROUP_KEY_PARAMS,
           title: `Parameters (${filteredParams.length})`,
-          children: truncateWithHint(paramChildren, filteredParams.length, 'params'),
+          children: truncateWithShowMore(paramChildren, filteredParams.length, 'params'),
         });
       }
       if (filteredTags.length) {
@@ -229,12 +258,12 @@ export const ExperimentViewRunsColumnSelector = React.memo(
         result.push({
           key: GROUP_KEY_TAGS,
           title: `Tags (${filteredTags.length})`,
-          children: truncateWithHint(tagChildren, filteredTags.length, 'tags'),
+          children: truncateWithShowMore(tagChildren, filteredTags.length, 'tags'),
         });
       }
 
       return result;
-    }, [attributeColumnNames, filter, runsData, tagsKeyList, theme]);
+    }, [attributeColumnNames, filter, runsData, tagsKeyList, theme, visibleLimits, showMore]);
 
     // This callback toggles entire group of keys
     const toggleGroup = useCallback(
@@ -263,6 +292,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     useEffect(() => {
       if (columnSelectorVisible) {
         setFilter('');
+        setVisibleLimits({});
 
         // Let's wait for the next execution frame, then:
         // - restore the dropdown menu scroll position
@@ -282,8 +312,8 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     const onCheck = useCallback(
       // We need to recreate antd's tree check callback signature
       (_: any, { node: { key, checked } }: AntdTreeCheckCallback) => {
-        // Ignore clicks on hint nodes (non-selectable "N more — use search" items)
-        if (key.toString().startsWith('__hint_')) return;
+        // Ignore clicks on "Show more" placeholder nodes
+        if (key.toString().startsWith('__show_more_')) return;
         if (isCanonicalSortKeyOfType(key.toString(), GROUP_KEY)) {
           const columnType = extractCanonicalSortKey(key.toString(), GROUP_KEY);
           const canonicalKeysForGroup = canonicalKeyNames[columnType];
@@ -358,6 +388,11 @@ export const ExperimentViewRunsColumnSelector = React.memo(
               textOverflow: 'ellipsis',
               overflow: 'hidden',
             },
+            // Hide the checkbox on "Show more" placeholder nodes
+            '[data-tree-node-id^="__show_more_"] .ant-tree-checkbox, .ant-tree-treenode[data-key^="__show_more_"] .ant-tree-checkbox':
+              {
+                display: 'none',
+              },
             [theme.responsive.mediaQueries.xs]: {
               maxHeight: 'calc(100vh - 100px)',
             },
