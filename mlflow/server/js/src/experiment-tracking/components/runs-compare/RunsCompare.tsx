@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import type { MetricEntitiesByName, ChartSectionConfig, ImageEntity } from '../../types';
 import type { KeyValueEntity } from '../../../common/types';
 import { RunsChartsCardConfig } from '../runs-charts/runs-charts.types';
-import type { RunsChartType } from '../runs-charts/runs-charts.types';
+import { RunsChartType } from '../runs-charts/runs-charts.types';
 import { type SerializedRunsChartsCardConfigCard } from '../runs-charts/runs-charts.types';
 import { RunsChartsConfigureModal } from '../runs-charts/components/RunsChartsConfigureModal';
 import { createEmptyChartCardPredicate, type RunsChartsRunData } from '../runs-charts/components/RunsCharts.common';
