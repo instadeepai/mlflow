@@ -190,6 +190,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
           key: `__show_more_${groupLabel}`,
           title: (
             <span
+              data-show-more
               role="button"
               tabIndex={0}
               onClick={(e) => {
@@ -389,10 +390,9 @@ export const ExperimentViewRunsColumnSelector = React.memo(
               overflow: 'hidden',
             },
             // Hide the checkbox on "Show more" placeholder nodes
-            '[data-tree-node-id^="__show_more_"] .ant-tree-checkbox, .ant-tree-treenode[data-key^="__show_more_"] .ant-tree-checkbox':
-              {
-                display: 'none',
-              },
+            '.ant-tree-treenode:has([data-show-more]) .ant-tree-checkbox': {
+              display: 'none',
+            },
             [theme.responsive.mediaQueries.xs]: {
               maxHeight: 'calc(100vh - 100px)',
             },
