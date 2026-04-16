@@ -1,5 +1,6 @@
 import { RunsChartsCardConfig, RunsChartType } from './runs-charts.types';
 import type { RunsChartsRunData } from './components/RunsCharts.common';
+import type { MetricEntitiesByName } from '../../types';
 
 /**
  * Stress tests for chart config generation.
@@ -9,11 +10,11 @@ import type { RunsChartsRunData } from './components/RunsCharts.common';
  */
 
 function createMockRunData(metricCount: number, runId = 'run-1'): RunsChartsRunData {
-  const metrics: Record<string, { key: string; value: number; step: number }> = {};
+  const metrics: MetricEntitiesByName = {};
   for (let i = 0; i < metricCount; i++) {
     const section = ['train', 'eval', 'reward', 'loss', 'env', 'policy'][i % 6];
     const key = `${section}/layer_${Math.floor(i / 6)}/metric_${i}`;
-    metrics[key] = { key, value: Math.random(), step: i > 50 ? 10 : 0 };
+    metrics[key] = { key, value: Math.random(), step: i > 50 ? 10 : 0, timestamp: 0 };
   }
   return {
     uuid: runId,
@@ -23,8 +24,7 @@ function createMockRunData(metricCount: number, runId = 'run-1'): RunsChartsRunD
     params: {},
     tags: {},
     images: {},
-    datasets: [],
-  };
+  } as RunsChartsRunData;
 }
 
 describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
@@ -38,9 +38,7 @@ describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
     });
 
     // ASSERT — every metric gets a chart, not just the first 100
-    const metricCharts = resultChartSet.filter(
-      (c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR,
-    );
+    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
     expect(metricCharts.length).toBe(250);
   });
 
@@ -54,9 +52,7 @@ describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
     });
 
     // ASSERT
-    const metricCharts = resultChartSet.filter(
-      (c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR,
-    );
+    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
     expect(metricCharts.length).toBe(3000);
   });
 
@@ -129,9 +125,7 @@ describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
     });
 
     // ASSERT — should still be 500 charts, not 1000
-    const metricCharts = resultChartSet.filter(
-      (c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR,
-    );
+    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
     expect(metricCharts.length).toBe(500);
   });
 });

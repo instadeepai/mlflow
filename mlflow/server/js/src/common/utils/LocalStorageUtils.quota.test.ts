@@ -45,15 +45,18 @@ test('FIX: LocalStorageStore.setItem does NOT throw when storage is full', () =>
 
   // This would have crashed the app before the fix
   expect(() => {
-    store.setItem('ReactComponentState', JSON.stringify({
-      compareRunCharts: new Array(3000).fill({
-        type: 'LINE',
-        metricKey: 'train/loss',
-        uuid: 'abc-123',
-        isGenerated: true,
-        deleted: false,
+    store.setItem(
+      'ReactComponentState',
+      JSON.stringify({
+        compareRunCharts: new Array(3000).fill({
+          type: 'LINE',
+          metricKey: 'train/loss',
+          uuid: 'abc-123',
+          isGenerated: true,
+          deleted: false,
+        }),
       }),
-    }));
+    );
   }).not.toThrow();
 });
 

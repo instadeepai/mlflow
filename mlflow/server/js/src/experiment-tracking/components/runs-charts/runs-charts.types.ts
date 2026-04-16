@@ -201,21 +201,21 @@ export abstract class RunsChartsCardConfig {
     const sortedMetrics = Array.from(metricsToRender).sort();
 
     sortedMetrics.forEach((metricsKey) => {
-        // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
-        const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
-          dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
-        );
-        const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
+      // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
+      const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
+        dataTraceMetricsContainMultipleEpochs(dataTrace, metricsKey),
+      );
+      const chartType = anyRunHasMultipleEpochs ? RunsChartType.LINE : RunsChartType.BAR;
 
-        const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(metricsKey)];
+      const sectionId = sectionName2Uuid[RunsChartsCardConfig.extractChartSectionName(metricsKey)];
 
-        // Add a bar metric chart only if at least one metric key is detected
-        resultChartSet.push({
-          ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
-          metricKey: metricsKey,
-          ...(metricsKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
-        } as RunsChartsBarCardConfig);
-      });
+      // Add a bar metric chart only if at least one metric key is detected
+      resultChartSet.push({
+        ...RunsChartsCardConfig.getEmptyChartCardByType(chartType, true, getUUID(), sectionId),
+        metricKey: metricsKey,
+        ...(metricsKey.startsWith(MLFLOW_SYSTEM_METRIC_PREFIX) ? { xAxisKey: 'time', useGlobalXaxisKey: false } : {}),
+      } as RunsChartsBarCardConfig);
+    });
 
     Array.from(imagesToRender)
       .sort()

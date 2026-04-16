@@ -139,9 +139,7 @@ export const useExperimentListQuery = ({
     const experiments = queryResult.data?.experiments;
     if (!experiments) return undefined;
     // Filter out gateway experiments client-side (IS NULL not supported by all backends)
-    const nonGateway = experiments.filter(
-      (e) => !e.tags?.some((tag) => tag.key === EXPERIMENT_IS_GATEWAY_TAG),
-    );
+    const nonGateway = experiments.filter((e) => !e.tags?.some((tag) => tag.key === EXPERIMENT_IS_GATEWAY_TAG));
     const demo = nonGateway.filter(isDemoExperiment);
     const nonDemo = nonGateway.filter((e) => !isDemoExperiment(e));
     return [...demo, ...nonDemo];

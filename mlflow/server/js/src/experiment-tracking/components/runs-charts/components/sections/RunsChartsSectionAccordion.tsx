@@ -440,7 +440,8 @@ export const RunsChartsSectionAccordion = ({
             componentId="mlflow_show_more_sections"
             onClick={() => setVisibleSectionCount((prev) => prev + SECTIONS_PER_PAGE)}
           >
-            Show {Math.min(totalSections - visibleSectionCount, SECTIONS_PER_PAGE)} more sections ({totalSections - visibleSectionCount} remaining)
+            Show {Math.min(totalSections - visibleSectionCount, SECTIONS_PER_PAGE)} more sections (
+            {totalSections - visibleSectionCount} remaining)
           </Button>
         </div>
       )}

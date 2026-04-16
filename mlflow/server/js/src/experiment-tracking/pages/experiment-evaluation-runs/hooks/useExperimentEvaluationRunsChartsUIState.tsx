@@ -4,8 +4,8 @@ import { MetricEntitiesByName } from '../../../types';
 
 import { compact, first, isEmpty, uniq } from 'lodash';
 import type { RunsChartsUIConfigurationSetter } from '../../../components/runs-charts/hooks/useRunsChartsUIConfiguration';
-import type { RunsChartsCardConfig } from '../../../components/runs-charts/runs-charts.types';
-import { RunsChartType, RunsChartsBarCardConfig } from '../../../components/runs-charts/runs-charts.types';
+import type { RunsChartsCardConfig, RunsChartsBarCardConfig } from '../../../components/runs-charts/runs-charts.types';
+import { RunsChartType } from '../../../components/runs-charts/runs-charts.types';
 import type { ExperimentRunsChartsUIConfiguration } from '../../../components/experiment-page/models/ExperimentPageUIState';
 
 type UpdateChartStateAction = { type: 'UPDATE'; stateSetter: RunsChartsUIConfigurationSetter };
