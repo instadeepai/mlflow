@@ -389,8 +389,9 @@ export const ExperimentViewRunsColumnSelector = React.memo(
               textOverflow: 'ellipsis',
               overflow: 'hidden',
             },
-            // Hide the checkbox on "Show more" placeholder nodes
-            '.ant-tree-treenode:has([data-show-more]) .ant-tree-checkbox': {
+            // Hide the checkbox on "Show more" placeholder nodes.
+            // Use wildcard class selectors to match regardless of Design System prefix.
+            '[class*="treenode"]:has([data-show-more]) [class*="checkbox"]': {
               display: 'none',
             },
             [theme.responsive.mediaQueries.xs]: {
