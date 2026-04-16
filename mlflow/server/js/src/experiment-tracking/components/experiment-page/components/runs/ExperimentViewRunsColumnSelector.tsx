@@ -319,14 +319,48 @@ export const ExperimentViewRunsColumnSelector = React.memo(
           const columnType = extractCanonicalSortKey(key.toString(), GROUP_KEY);
           const canonicalKeysForGroup = canonicalKeyNames[columnType];
           if (canonicalKeysForGroup) {
-            toggleGroup(checked, findMatching(canonicalKeysForGroup, filter));
+            // When no filter is active, only toggle the currently visible items (paginated view)
+            // to avoid selecting thousands of columns at once which would freeze the runs table.
+            // Users can click "Show more" to load additional items, then toggle again.
+            const isFiltering = filter.length > 0;
+            const groupLabelMap: Record<string, string> = {
+              [COLUMN_TYPES.METRICS]: 'metrics',
+              [COLUMN_TYPES.PARAMS]: 'params',
+              [COLUMN_TYPES.TAGS]: 'tags',
+            };
+            const groupLabel = groupLabelMap[columnType];
+            const limit =
+              !isFiltering && groupLabel
+                ? (visibleLimits[groupLabel] ?? MAX_ITEMS_WITHOUT_FILTER)
+                : canonicalKeysForGroup.length;
+            const keysToToggle = findMatching(canonicalKeysForGroup, filter).slice(0, limit);
+            toggleGroup(checked, keysToToggle);
           }
         } else {
           toggleSingleKey(key.toString(), checked);
         }
       },
-      [canonicalKeyNames, toggleGroup, toggleSingleKey, filter],
+      [canonicalKeyNames, toggleGroup, toggleSingleKey, filter, visibleLimits],
     );
+
+    // Clear all selected metrics/params/tags (keeps attribute columns since those are few)
+    const clearSelected = useCallback(() => {
+      const toRemove = new Set([
+        ...canonicalKeyNames[COLUMN_TYPES.METRICS],
+        ...canonicalKeyNames[COLUMN_TYPES.PARAMS],
+        ...canonicalKeyNames[COLUMN_TYPES.TAGS],
+      ]);
+      setCheckedColumns((checked) => checked.filter((k) => !toRemove.has(k)));
+    }, [canonicalKeyNames, setCheckedColumns]);
+
+    const selectedCount = useMemo(() => {
+      const groupKeys = new Set([
+        ...canonicalKeyNames[COLUMN_TYPES.METRICS],
+        ...canonicalKeyNames[COLUMN_TYPES.PARAMS],
+        ...canonicalKeyNames[COLUMN_TYPES.TAGS],
+      ]);
+      return selectedColumns.filter((k) => groupKeys.has(k)).length;
+    }, [canonicalKeyNames, selectedColumns]);
 
     // This callback moves focus to tree element if down arrow has been pressed
     // when inside search input area.
@@ -374,6 +408,28 @@ export const ExperimentViewRunsColumnSelector = React.memo(
             }}
             onKeyDown={searchInputKeyDown}
           />
+          {selectedCount > 0 && (
+            <div
+              css={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: theme.spacing.sm,
+                fontSize: theme.typography.fontSizeSm,
+                color: theme.colors.textSecondary,
+              }}
+            >
+              <span>{selectedCount} selected</span>
+              <Button
+                componentId="mlflow_column_selector_clear_selected"
+                size="small"
+                type="link"
+                onClick={clearSelected}
+              >
+                Clear selected
+              </Button>
+            </div>
+          )}
         </div>
         <div
           ref={scrollableContainerRef}
