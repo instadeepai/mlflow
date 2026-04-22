@@ -4,8 +4,8 @@ import { MetricEntitiesByName } from '../../../types';
 
 import { compact, first, isEmpty, uniq } from 'lodash';
 import type { RunsChartsUIConfigurationSetter } from '../../../components/runs-charts/hooks/useRunsChartsUIConfiguration';
-import type { RunsChartsCardConfig } from '../../../components/runs-charts/runs-charts.types';
-import { RunsChartType, RunsChartsBarCardConfig } from '../../../components/runs-charts/runs-charts.types';
+import type { RunsChartsBarCardConfig, RunsChartsCardConfig } from '../../../components/runs-charts/runs-charts.types';
+import { RunsChartType } from '../../../components/runs-charts/runs-charts.types';
 import type { ExperimentRunsChartsUIConfiguration } from '../../../components/experiment-page/models/ExperimentPageUIState';
 
 type UpdateChartStateAction = { type: 'UPDATE'; stateSetter: RunsChartsUIConfigurationSetter };
@@ -41,8 +41,12 @@ const getExperimentEvalRunsPageChartSetup = (allMetricKeys: string[]) => {
     };
   });
 
+  // Auto-collapse sections when there are many charts to prevent browser crashes
+  // (8000+ metrics would otherwise render 8000 BAR charts on mount)
+  const collapseByDefault = compareRunCharts.length > 100;
+
   const compareRunSections: ChartSectionConfig[] = firstNameSegments.map((segmentName) => ({
-    display: true,
+    display: !collapseByDefault,
     name: segmentName,
     uuid: `autogen-${segmentName}`,
     isReordered: false,
@@ -50,7 +54,7 @@ const getExperimentEvalRunsPageChartSetup = (allMetricKeys: string[]) => {
 
   if (isEmpty(compareRunSections)) {
     compareRunSections.push({
-      display: true,
+      display: !collapseByDefault,
       name: 'Metrics',
       uuid: 'default',
       isReordered: false,
@@ -151,15 +155,7 @@ const saveDataToStorage = async (
   storeIdentifier: string,
   dataToPersist: ExperimentEvaluationRunsChartsUIConfiguration,
 ) => {
-  try {
-    localStorage.setItem(createLocalStorageKey(storeIdentifier), JSON.stringify(dataToPersist));
-  } catch (e) {
-    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
-      console.warn('localStorage quota exceeded — evaluation chart state will not be persisted');
-    } else {
-      throw e;
-    }
-  }
+  localStorage.setItem(createLocalStorageKey(storeIdentifier), JSON.stringify(dataToPersist));
 };
 
 /**
