@@ -7,6 +7,7 @@ import type { RunsChartsUIConfigurationSetter } from '../../../components/runs-c
 import type { RunsChartsBarCardConfig, RunsChartsCardConfig } from '../../../components/runs-charts/runs-charts.types';
 import { RunsChartType } from '../../../components/runs-charts/runs-charts.types';
 import type { ExperimentRunsChartsUIConfiguration } from '../../../components/experiment-page/models/ExperimentPageUIState';
+import { safeSetItem } from '../../../../common/utils/LocalStorageUtils';
 
 type UpdateChartStateAction = { type: 'UPDATE'; stateSetter: RunsChartsUIConfigurationSetter };
 type InitializeChartStateAction = { type: 'INITIALIZE'; initialConfig?: ExperimentEvaluationRunsChartsUIConfiguration };
@@ -155,7 +156,12 @@ const saveDataToStorage = async (
   storeIdentifier: string,
   dataToPersist: ExperimentEvaluationRunsChartsUIConfiguration,
 ) => {
-  localStorage.setItem(createLocalStorageKey(storeIdentifier), JSON.stringify(dataToPersist));
+  safeSetItem(
+    localStorage,
+    createLocalStorageKey(storeIdentifier),
+    JSON.stringify(dataToPersist),
+    'evaluation chart state',
+  );
 };
 
 /**
