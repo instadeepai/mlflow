@@ -659,6 +659,15 @@ MLFLOW_GATEWAY_BUDGET_REFRESH_INTERVAL = _EnvironmentVariable(
 #: (default: ``None`` — uses in-memory tracker)
 MLFLOW_GATEWAY_BUDGET_REDIS_URL = _EnvironmentVariable("MLFLOW_GATEWAY_BUDGET_REDIS_URL", str, None)
 
+#: Comma-separated list of provider names that are allowed in the AI Gateway.
+#: When set, only these providers will be available for endpoint creation and discovery.
+#: All other providers are rejected.
+#: Example: ``openai,anthropic,gemini``
+#: (default: ``None`` — all providers are allowed)
+MLFLOW_GATEWAY_ALLOWED_PROVIDERS = _EnvironmentVariable(
+    "MLFLOW_GATEWAY_ALLOWED_PROVIDERS", str, None
+)
+
 #: If True, MLflow fluent logging APIs, e.g., `mlflow.log_metric` will log asynchronously.
 MLFLOW_ENABLE_ASYNC_LOGGING = _BooleanEnvironmentVariable("MLFLOW_ENABLE_ASYNC_LOGGING", False)
 
@@ -708,6 +717,22 @@ MLFLOW_TRACE_BUFFER_TTL_SECONDS = _EnvironmentVariable("MLFLOW_TRACE_BUFFER_TTL_
 
 # How many traces to be buffered in-memory at client side before being abandoned.
 MLFLOW_TRACE_BUFFER_MAX_SIZE = _EnvironmentVariable("MLFLOW_TRACE_BUFFER_MAX_SIZE", int, 1000)
+
+#: When enabled, automatically extracts base64-encoded multimodal content (images, audio) from
+#: span inputs/outputs and stores them as separate trace attachments. This keeps trace JSON
+#: lightweight while preserving the binary content as downloadable artifacts.
+#: (default: ``True``)
+MLFLOW_TRACE_EXTRACT_ATTACHMENTS = _BooleanEnvironmentVariable(
+    "MLFLOW_TRACE_EXTRACT_ATTACHMENTS", True
+)
+
+#: Maximum size in bytes for a single trace attachment. When set, attachments
+#: exceeding this limit are discarded and replaced with an error message.
+#: Only applies to trace attachments, not artifact uploads.
+#: (default: unset — no limit)
+MLFLOW_TRACE_MAX_ATTACHMENT_SIZE = _EnvironmentVariable(
+    "MLFLOW_TRACE_MAX_ATTACHMENT_SIZE", int, None
+)
 
 #: Maximum number of prompt versions to cache in the LRU cache for _load_prompt_version_cached.
 #: This cache improves performance by avoiding repeated network calls for the same prompt version.
@@ -1090,7 +1115,6 @@ _MLFLOW_DATABRICKS_TRAFFIC_ID = _EnvironmentVariable("MLFLOW_DATABRICKS_TRAFFIC_
 #######################################################################################
 
 #: Specifies whether to enable async trace logging to Databricks Tracing Server.
-#: TODO: Update OSS MLflow Server to logging async by default
 #: Default: ``True``.
 MLFLOW_ENABLE_ASYNC_TRACE_LOGGING = _BooleanEnvironmentVariable(
     "MLFLOW_ENABLE_ASYNC_TRACE_LOGGING", True
@@ -1139,6 +1163,21 @@ MLFLOW_ASYNC_TRACE_LOGGING_RETRY_TIMEOUT = _EnvironmentVariable(
 #: (default: ``None``)
 MLFLOW_TRACING_SQL_WAREHOUSE_ID = _EnvironmentVariable("MLFLOW_TRACING_SQL_WAREHOUSE_ID", str, None)
 
+#: When ``True``, MLflow verifies that the SQL warehouse referenced by
+#: ``MLFLOW_TRACING_SQL_WAREHOUSE_ID`` is running before making V4/V5 MLflow tracing API calls that
+#: require it, and starts it and waits for it to reach the ``RUNNING`` state if not.
+#: (default: ``True``)
+MLFLOW_SQL_WAREHOUSE_AUTO_START = _BooleanEnvironmentVariable(
+    "MLFLOW_SQL_WAREHOUSE_AUTO_START", True
+)
+
+#: Maximum number of seconds MLflow waits for the SQL warehouse to reach the ``RUNNING`` state
+#: when auto-starting it. Applies only when ``MLFLOW_SQL_WAREHOUSE_AUTO_START`` is enabled.
+#: (default: ``1200``)
+MLFLOW_SQL_WAREHOUSE_AUTO_START_TIMEOUT_SECONDS = _EnvironmentVariable(
+    "MLFLOW_SQL_WAREHOUSE_AUTO_START_TIMEOUT_SECONDS", int, 1200
+)
+
 #: Specifies whether to export spans incrementally as they complete, in addition to
 #: exporting the full trace. When enabled, spans are written to the tracking store
 #: individually via ``log_spans`` as each span finishes. This provides real-time span
@@ -1148,6 +1187,16 @@ MLFLOW_TRACING_SQL_WAREHOUSE_ID = _EnvironmentVariable("MLFLOW_TRACING_SQL_WAREH
 #: Databricks Unity Catalog (UC) schema (format: `<catalog_name>.<schema_name>`).
 #: (default: ``None`` (an active MLflow experiment will be used))
 MLFLOW_TRACING_DESTINATION = _EnvironmentVariable("MLFLOW_TRACING_DESTINATION", str, None)
+
+#: When set to ``True``, use OTel BatchSpanProcessor to export spans in a background thread
+#: instead of inline during on_end. This decouples trace export from request handling under
+#: concurrent load. Takes effect whenever async trace logging is active (i.e. when
+#: ``MLFLOW_ENABLE_ASYNC_TRACE_LOGGING`` is ``True``, which is the default for OSS MLflow
+#: and Databricks non-notebook workloads).
+#: (default: ``True``)
+MLFLOW_USE_BATCH_SPAN_PROCESSOR = _BooleanEnvironmentVariable(
+    "MLFLOW_USE_BATCH_SPAN_PROCESSOR", True
+)
 
 
 #######################################################################################

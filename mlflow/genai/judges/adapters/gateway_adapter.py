@@ -48,7 +48,7 @@ from mlflow.genai.judges.utils.tool_calling_utils import (
     _raise_iteration_limit_exceeded,
     _remove_oldest_tool_call_pair,
 )
-from mlflow.genai.utils.llm_utils import _pydantic_to_response_format
+from mlflow.genai.utils.message_utils import pydantic_to_response_format
 from mlflow.metrics.genai.model_utils import (
     _call_llm_provider_api,
     _get_provider_instance,
@@ -308,7 +308,7 @@ def _invoke_via_gateway(
         )
 
     _, model_name = _parse_model_uri(model_uri)
-    rf_dict = _pydantic_to_response_format(response_format) if response_format else None
+    rf_dict = pydantic_to_response_format(response_format) if response_format else None
     return _call_llm_provider_api(
         provider,
         model_name,
@@ -387,7 +387,7 @@ class GatewayAdapter(BaseJudgeAdapter):
         cleaned_response = _strip_markdown_code_blocks(response)
 
         try:
-            response_dict = json.loads(cleaned_response)
+            response_dict = json.loads(cleaned_response, strict=False)
         except json.JSONDecodeError as e:
             raise MlflowException(
                 f"Failed to parse response from judge model. Response: {response}",
@@ -429,7 +429,7 @@ class GatewayAdapter(BaseJudgeAdapter):
 
         cleaned_response = _strip_markdown_code_blocks(output.response)
         try:
-            response_dict = json.loads(cleaned_response)
+            response_dict = json.loads(cleaned_response, strict=False)
         except json.JSONDecodeError as e:
             raise MlflowException(
                 f"Failed to parse response from judge model. Response: {output.response}",
@@ -463,7 +463,7 @@ class GatewayAdapter(BaseJudgeAdapter):
         cleaned_response = _strip_markdown_code_blocks(output.response)
 
         try:
-            response_dict = json.loads(cleaned_response)
+            response_dict = json.loads(cleaned_response, strict=False)
         except json.JSONDecodeError as e:
             raise MlflowException(
                 f"Failed to parse response from judge model. Response: {output.response}",
@@ -517,7 +517,7 @@ class GatewayAdapter(BaseJudgeAdapter):
         # Resolve provider for config, URL, headers, and request/response transformation.
         # Each provider's get_endpoint_url() returns the full endpoint path
         # (e.g. OpenAI: .../chat/completions, Anthropic: .../messages).
-        provider_instance = _get_provider_instance(provider, model_name)
+        provider_instance = _get_provider_instance(provider, model_name, base_url=base_url)
         endpoint = base_url or provider_instance.get_endpoint_url("llm/v1/chat")
         headers = dict(provider_instance.headers or {})
         # Tag gateway requests so the server can attribute traffic to the judge

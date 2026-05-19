@@ -11,6 +11,12 @@ class TraceMetadataKey:
     SIZE_STATS = "mlflow.trace.sizeStats"
     # Aggregated token usage information in a single trace, stored as a dumped JSON string.
     TOKEN_USAGE = "mlflow.trace.tokenUsage"
+    # Set by start_trace() when it writes the authoritative (DFS-dedup) TOKEN_USAGE / COST
+    # so that concurrent log_spans() calls do not accumulate on top of them.
+    # Set by start_trace() after writing authoritative trace-level values (TOKEN_USAGE,
+    # COST, session ID, request_time, execution_duration) so that concurrent log_spans()
+    # calls do not overwrite them.
+    TRACE_INFO_FINALIZED = "mlflow.trace.infoFinalized"
     # Aggregated cost information in a single trace, stored as a dumped JSON string (USD).
     COST = "mlflow.trace.cost"
     # Store the user ID/name of the application request. Do not confuse this with mlflow.user
@@ -25,6 +31,7 @@ class TraceMetadataKey:
     # Gateway-specific metadata keys
     GATEWAY_ENDPOINT_ID = "mlflow.gateway.endpointId"
     GATEWAY_REQUEST_TYPE = "mlflow.gateway.requestType"
+    GATEWAY_CALLER = "mlflow.gateway.caller"
     # Store the user ID/name from authentication
     AUTH_USER_ID = "mlflow.auth.userId"
     AUTH_USERNAME = "mlflow.auth.username"

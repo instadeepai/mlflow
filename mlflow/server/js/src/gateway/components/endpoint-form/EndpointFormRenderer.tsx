@@ -45,7 +45,7 @@ export interface EndpointFormRendererProps {
   /** Handler for name field blur (for duplicate checking) */
   onNameBlur: () => void;
   /** Component ID prefix for telemetry */
-  componentIdPrefix?: string;
+  componentId?: string;
   /** When true, adapts layout for use inside containers like modals */
   embedded?: boolean;
 }
@@ -71,7 +71,7 @@ export const EndpointFormRenderer = ({
   onSubmit,
   onCancel,
   onNameBlur,
-  componentIdPrefix = `mlflow.gateway.endpoint`,
+  componentId = `mlflow.gateway.endpoint`,
   embedded = false,
 }: EndpointFormRendererProps) => {
   const { theme } = useDesignSystemTheme();
@@ -129,7 +129,7 @@ export const EndpointFormRenderer = ({
       {error && (
         <div css={{ padding: embedded ? 0 : `0 ${theme.spacing.md}px` }}>
           <Alert
-            componentId={`${componentIdPrefix}.error`}
+            componentId={`${componentId}.error`}
             closable={false}
             message={errorMessage}
             type="error"
@@ -177,8 +177,8 @@ export const EndpointFormRenderer = ({
               render={({ field, fieldState }) => (
                 <div>
                   <GatewayInput
-                    id={`${componentIdPrefix}.name`}
-                    componentId={`${componentIdPrefix}.name`}
+                    id={`${componentId}.name`}
+                    componentId={`${componentId}.name`}
                     {...field}
                     onChange={(e) => {
                       field.onChange(e);
@@ -217,7 +217,7 @@ export const EndpointFormRenderer = ({
                   <UsageTrackingConfigurator
                     value={field.value}
                     onChange={field.onChange}
-                    componentIdPrefix="mlflow.gateway.create-endpoint.usage-tracking"
+                    componentId="mlflow.gateway.create-endpoint.usage-tracking"
                   />
                 )}
               />
@@ -254,7 +254,7 @@ export const EndpointFormRenderer = ({
                       });
                     }}
                     error={fieldState.error?.message}
-                    componentIdPrefix={`${componentIdPrefix}.provider`}
+                    componentId={`${componentId}.provider`}
                   />
                 )}
               />
@@ -268,7 +268,7 @@ export const EndpointFormRenderer = ({
                     value={field.value}
                     onChange={field.onChange}
                     error={fieldState.error?.message}
-                    componentIdPrefix={`${componentIdPrefix}.model`}
+                    componentId={`${componentId}.model`}
                   />
                 )}
               />
@@ -291,7 +291,7 @@ export const EndpointFormRenderer = ({
                     authModes={authModes}
                     defaultAuthMode={defaultAuthMode}
                     isLoadingProviderConfig={isLoadingProviderConfig}
-                    componentIdPrefix={`${componentIdPrefix}.api-key`}
+                    componentId={`${componentId}.api-key`}
                   />
                 </div>
               )}
@@ -376,12 +376,12 @@ export const EndpointFormRenderer = ({
           flexShrink: 0,
         }}
       >
-        <Button componentId={`${componentIdPrefix}.cancel`} onClick={onCancel}>
+        <Button componentId={`${componentId}.cancel`} onClick={onCancel}>
           <FormattedMessage defaultMessage="Cancel" description="Cancel button" />
         </Button>
-        <Tooltip componentId={`${componentIdPrefix}.submit-tooltip`} content={buttonTooltip}>
+        <Tooltip componentId={`${componentId}.submit-tooltip`} content={buttonTooltip}>
           <Button
-            componentId={`${componentIdPrefix}.submit`}
+            componentId={`${componentId}.submit`}
             type="primary"
             onClick={form.handleSubmit(onSubmit)}
             loading={isSubmitting}

@@ -12,6 +12,12 @@ import cachetools
 from typing_extensions import NotRequired
 
 from mlflow.environment_variables import MLFLOW_MODEL_CATALOG_CACHE_TTL, MLFLOW_MODEL_CATALOG_URI
+from mlflow.exceptions import MlflowException
+from mlflow.utils.provider_filter import (
+    filter_providers,
+    is_provider_allowed,
+    normalize_provider_name,
+)
 from mlflow.utils.request_utils import cloud_storage_http_request
 
 _logger = logging.getLogger(__name__)
@@ -90,6 +96,7 @@ class ModelInfo(TypedDict, total=False):
     cache_read_input_token_cost: float
     cache_creation_input_token_cost: float
     deprecation_date: str
+    last_updated_at: str
 
 
 class ModelDict(TypedDict):
@@ -111,6 +118,7 @@ class ModelDict(TypedDict):
     input_cost_per_token: float | None
     output_cost_per_token: float | None
     deprecation_date: str | None
+    last_updated_at: str | None
 
 
 # --- MLflow-native catalog schema TypedDicts (matches per-provider JSON files) ---
@@ -152,6 +160,7 @@ class CatalogModelEntry(TypedDict, total=False):
     pricing: CatalogPricing
     capabilities: CatalogCapabilities
     deprecation_date: str
+    last_updated_at: str
 
 
 class CatalogFile(TypedDict):
@@ -190,6 +199,9 @@ def _flatten_catalog_entry(entry: CatalogModelEntry) -> ModelInfo:
 
     if dep := entry.get("deprecation_date"):
         info["deprecation_date"] = dep
+
+    if last_updated_at := entry.get("last_updated_at"):
+        info["last_updated_at"] = last_updated_at
 
     return info
 
@@ -557,6 +569,27 @@ _PROVIDER_AUTH_MODES: dict[str, dict[str, AuthModeDict]] = {
                 },
             ],
         },
+        "default_chain": {
+            "display_name": "Application Default Credentials",
+            "description": "Use the server's Application Default Credentials "
+            "(GOOGLE_APPLICATION_CREDENTIALS, gcloud auth application-default login, "
+            "or attached GCE/GKE/Cloud Run service account)",
+            "fields": [
+                {
+                    "name": "vertex_project",
+                    "description": "GCP Project ID",
+                    "secret": False,
+                    "required": True,
+                },
+                {
+                    "name": "vertex_location",
+                    "description": "GCP Region (e.g., us-central1)",
+                    "secret": False,
+                    "required": False,
+                    "default": "us-central1",
+                },
+            ],
+        },
     },
     "databricks": {
         "pat_token": {
@@ -775,6 +808,16 @@ def get_provider_config_response(provider: str) -> ProviderConfigResponse:
     if not provider:
         raise ValueError("Provider parameter is required")
 
+    if not is_provider_allowed(provider):
+        _logger.debug(
+            "Provider '%s' blocked by MLFLOW_GATEWAY_ALLOWED_PROVIDERS",
+            provider,
+        )
+        raise MlflowException.invalid_parameter_value(
+            f"Provider '{provider}' is not allowed by the current gateway provider policy."
+        )
+
+    provider = normalize_provider_name(provider.lower())
     config_provider = "bedrock" if provider in _BEDROCK_PROVIDERS else provider
 
     if config_provider in _PROVIDER_AUTH_MODES:
@@ -820,10 +863,7 @@ def _normalize_provider(provider: str) -> str:
 
 def get_all_providers() -> list[str]:
     """
-    Get a list of all providers that have chat, completion, or embedding capabilities.
-
-    Only returns providers that have at least one chat, completion, or embedding model,
-    excluding providers that only offer image generation, audio, or other non-text services.
+    Get a list of all providers.
 
     Provider variants are consolidated into a single provider (e.g., all vertex_ai-*
     variants are returned as just vertex_ai).
@@ -832,12 +872,8 @@ def get_all_providers() -> list[str]:
     for provider in _list_provider_names():
         if provider in _EXCLUDED_PROVIDERS:
             continue
-        # Check that the provider has at least one model with a supported mode
-        for info in _load_provider(provider).values():
-            if info.get("mode") in _SUPPORTED_MODEL_MODES:
-                providers.add(_normalize_provider(provider))
-                break
-    return list(providers)
+        providers.add(_normalize_provider(provider))
+    return filter_providers(list(providers))
 
 
 def get_models(provider: str | None = None) -> list[ModelDict]:
@@ -867,6 +903,7 @@ def get_models(provider: str | None = None) -> list[ModelDict]:
             - input_cost_per_token: Cost per input token (USD)
             - output_cost_per_token: Cost per output token (USD)
             - deprecation_date: Date when model will be deprecated (if known)
+            - last_updated_at: Date when the model entry was last updated in the catalog (if known)
     """
     if provider:
         # Fast path: only load provider files that match the filter
@@ -897,6 +934,9 @@ def _extract_models(
 
         # Filter by provider (matching against the normalized provider name)
         if provider_filter and normalized_provider != provider_filter:
+            continue
+
+        if normalized_provider and not is_provider_allowed(normalized_provider):
             continue
 
         mode = info.get("mode")
@@ -939,6 +979,7 @@ def _build_model_dict(
         "input_cost_per_token": info.get("input_cost_per_token"),
         "output_cost_per_token": info.get("output_cost_per_token"),
         "deprecation_date": info.get("deprecation_date"),
+        "last_updated_at": info.get("last_updated_at"),
     }
 
 

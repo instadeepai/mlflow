@@ -1,131 +1,229 @@
-import { RunsChartsCardConfig, RunsChartType } from './runs-charts.types';
+import { describe, test, expect } from '@jest/globals';
+import { RunsChartsCardConfig, RunsChartsLineCardConfig, RunsChartType } from './runs-charts.types';
 import type { RunsChartsRunData } from './components/RunsCharts.common';
-import type { MetricEntitiesByName } from '../../types';
 
-/**
- * Stress tests for chart config generation.
- *
- * Verifies that ALL logged metrics produce chart configs (no artificial cap)
- * and that config generation stays fast even at 3000 metrics.
- */
-
-function createMockRunData(metricCount: number, runId = 'run-1'): RunsChartsRunData {
-  const metrics: MetricEntitiesByName = {};
-  for (let i = 0; i < metricCount; i++) {
-    const section = ['train', 'eval', 'reward', 'loss', 'env', 'policy'][i % 6];
-    const key = `${section}/layer_${Math.floor(i / 6)}/metric_${i}`;
-    metrics[key] = { key, value: Math.random(), step: i > 50 ? 10 : 0, timestamp: 0 };
-  }
-  return {
-    uuid: runId,
-    displayName: runId,
-    runInfo: { runUuid: runId, experimentId: '1', runName: runId } as any,
+describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
+  const createMockRunData = (metrics: Record<string, any>): RunsChartsRunData => ({
+    uuid: 'test-run-uuid',
+    displayName: 'Test Run',
     metrics,
     params: {},
     tags: {},
     images: {},
-  } as RunsChartsRunData;
-}
-
-describe('RunsChartsCardConfig.getBaseChartAndSectionConfigs', () => {
-  test('generates chart configs for ALL metrics — no 100-metric cap', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(250)];
-
-    // ACT
-    const { resultChartSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
-    });
-
-    // ASSERT — every metric gets a chart, not just the first 100
-    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
-    expect(metricCharts.length).toBe(250);
   });
 
-  test('generates chart configs for 3000 metrics without cap', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(3000)];
+  describe('nodeLevelMetricsConfig integration', () => {
+    test('creates Node system metrics section and charts when common node metrics are provided', () => {
+      const runsData = [
+        createMockRunData({
+          'system/node_0/cpu_utilization_percentage': { key: 'system/node_0/cpu_utilization_percentage', value: 50 },
+          'system/node_1/cpu_utilization_percentage': { key: 'system/node_1/cpu_utilization_percentage', value: 60 },
+        }),
+      ];
 
-    // ACT
-    const { resultChartSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
+      const nodeLevelMetricsConfig = {
+        nodeIndexes: ['0', '1'],
+        commonMetrics: ['cpu_utilization_percentage'],
+        gpuIndexes: [],
+        commonGpuMetrics: [],
+        enabled: true as const,
+      };
+
+      const { resultChartSet, resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData,
+        nodeLevelMetricsConfig,
+      });
+
+      // Verify Node system metrics section was created
+      const nodeSectionExists = resultSectionSet.some((section) => section.name === 'Node system metrics');
+      expect(nodeSectionExists).toBe(true);
+
+      // Verify chart was created for the common metric
+      const cpuChart = resultChartSet.find(
+        (chart) =>
+          chart instanceof RunsChartsLineCardConfig &&
+          chart.nodeLevelSystemMetricConfiguration?.metric === 'cpu_utilization_percentage' &&
+          chart.nodeLevelSystemMetricConfiguration?.type === 'node',
+      ) as RunsChartsLineCardConfig;
+
+      expect(cpuChart).toBeDefined();
+      expect(cpuChart.displayName).toBe('cpu_utilization_percentage');
+      expect(cpuChart.selectedMetricKeys).toEqual([
+        'system/node_0/cpu_utilization_percentage',
+        'system/node_1/cpu_utilization_percentage',
+      ]);
     });
 
-    // ASSERT
-    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
-    expect(metricCharts.length).toBe(3000);
+    test('creates GPU system metrics section and charts when common GPU metrics are provided', () => {
+      const runsData = [
+        createMockRunData({
+          'system/node_0/gpu_0_utilization_percentage': {
+            key: 'system/node_0/gpu_0_utilization_percentage',
+            value: 70,
+          },
+          'system/node_1/gpu_0_utilization_percentage': {
+            key: 'system/node_1/gpu_0_utilization_percentage',
+            value: 80,
+          },
+        }),
+      ];
+
+      const nodeLevelMetricsConfig = {
+        nodeIndexes: ['0', '1'],
+        commonMetrics: [],
+        gpuIndexes: [0],
+        commonGpuMetrics: ['utilization_percentage'],
+        enabled: true as const,
+      };
+
+      const { resultChartSet, resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData,
+        nodeLevelMetricsConfig,
+      });
+
+      // Verify GPU system metrics section was created
+      const gpuSectionExists = resultSectionSet.some((section) => section.name === 'GPU system metrics');
+      expect(gpuSectionExists).toBe(true);
+
+      // Verify chart was created for the common GPU metric
+      const gpuChart = resultChartSet.find(
+        (chart) =>
+          chart instanceof RunsChartsLineCardConfig &&
+          chart.nodeLevelSystemMetricConfiguration?.metric === 'utilization_percentage' &&
+          chart.nodeLevelSystemMetricConfiguration?.type === 'gpu',
+      ) as RunsChartsLineCardConfig;
+
+      expect(gpuChart).toBeDefined();
+      expect(gpuChart.displayName).toBe('utilization_percentage');
+      expect(gpuChart.selectedMetricKeys).toEqual([
+        'system/node_0/gpu_0_utilization_percentage',
+        'system/node_1/gpu_0_utilization_percentage',
+      ]);
+    });
+
+    test('creates charts for multiple GPU indexes across multiple nodes', () => {
+      const runsData = [
+        createMockRunData({
+          'system/node_0/gpu_0_power_usage_watts': { key: 'system/node_0/gpu_0_power_usage_watts', value: 100 },
+          'system/node_0/gpu_1_power_usage_watts': { key: 'system/node_0/gpu_1_power_usage_watts', value: 110 },
+          'system/node_1/gpu_0_power_usage_watts': { key: 'system/node_1/gpu_0_power_usage_watts', value: 120 },
+          'system/node_1/gpu_1_power_usage_watts': { key: 'system/node_1/gpu_1_power_usage_watts', value: 130 },
+        }),
+      ];
+
+      const nodeLevelMetricsConfig = {
+        nodeIndexes: ['0', '1'],
+        commonMetrics: [],
+        gpuIndexes: [0, 1],
+        commonGpuMetrics: ['power_usage_watts'],
+        enabled: true as const,
+      };
+
+      const { resultChartSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData,
+        nodeLevelMetricsConfig,
+      });
+
+      const powerChart = resultChartSet.find(
+        (chart) =>
+          chart instanceof RunsChartsLineCardConfig &&
+          chart.nodeLevelSystemMetricConfiguration?.metric === 'power_usage_watts',
+      ) as RunsChartsLineCardConfig;
+
+      expect(powerChart).toBeDefined();
+      expect(powerChart.selectedMetricKeys).toEqual([
+        'system/node_0/gpu_0_power_usage_watts',
+        'system/node_0/gpu_1_power_usage_watts',
+        'system/node_1/gpu_0_power_usage_watts',
+        'system/node_1/gpu_1_power_usage_watts',
+      ]);
+    });
+
+    test('does not create node-level sections when nodeLevelMetricsConfig is disabled', () => {
+      const runsData = [
+        createMockRunData({
+          'system/node_0/cpu_utilization_percentage': { key: 'system/node_0/cpu_utilization_percentage', value: 50 },
+        }),
+      ];
+
+      const nodeLevelMetricsConfig = {
+        nodeIndexes: [],
+        commonMetrics: [],
+        gpuIndexes: [],
+        commonGpuMetrics: [],
+        enabled: false,
+      };
+
+      const { resultChartSet, resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData,
+        nodeLevelMetricsConfig,
+      });
+
+      // Verify Node/GPU system metrics sections were not created
+      const nodeSectionExists = resultSectionSet.some((section) => section.name === 'Node system metrics');
+      const gpuSectionExists = resultSectionSet.some((section) => section.name === 'GPU system metrics');
+
+      expect(nodeSectionExists).toBe(false);
+      expect(gpuSectionExists).toBe(false);
+
+      // Verify no node-level charts were created
+      const nodeLevelCharts = resultChartSet.filter(
+        (chart) => chart instanceof RunsChartsLineCardConfig && chart.nodeLevelSystemMetricConfiguration,
+      );
+      expect(nodeLevelCharts).toHaveLength(0);
+    });
+
+    test('does not create sections when common metrics arrays are empty', () => {
+      const runsData = [createMockRunData({})];
+
+      const nodeLevelMetricsConfig = {
+        nodeIndexes: ['0'],
+        commonMetrics: [],
+        gpuIndexes: [],
+        commonGpuMetrics: [],
+        enabled: true as const,
+      };
+
+      const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData,
+        nodeLevelMetricsConfig,
+      });
+
+      const nodeSectionExists = resultSectionSet.some((section) => section.name === 'Node system metrics');
+      const gpuSectionExists = resultSectionSet.some((section) => section.name === 'GPU system metrics');
+
+      expect(nodeSectionExists).toBe(false);
+      expect(gpuSectionExists).toBe(false);
+    });
   });
 
-  test('3000 metrics: config generation completes in under 2 seconds', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(3000)];
+  describe('section auto-collapse on high chart counts', () => {
+    const makeMetrics = (count: number): Record<string, any> => {
+      const metrics: Record<string, any> = {};
+      for (let i = 0; i < count; i++) {
+        const section = ['train', 'eval', 'reward', 'loss', 'env', 'policy'][i % 6];
+        const key = `${section}/layer_${Math.floor(i / 6)}/metric_${i}`;
+        metrics[key] = { key, value: Math.random(), step: 0, timestamp: 0 };
+      }
+      return metrics;
+    };
 
-    // ACT
-    const start = performance.now();
-    RunsChartsCardConfig.getBaseChartAndSectionConfigs({ runsData });
-    const elapsed = performance.now() - start;
-
-    // ASSERT — config generation (lightweight JS objects) should be fast
-    expect(elapsed).toBeLessThan(2000);
-  });
-
-  test('auto-collapses sections when chart count exceeds 100', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(200)];
-
-    // ACT
-    const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
+    test('collapses sections when chart count exceeds 100', () => {
+      const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData: [createMockRunData(makeMetrics(200))],
+      });
+      resultSectionSet.forEach((section) => {
+        expect(section.display).toBe(false);
+      });
     });
 
-    // ASSERT — all sections should be collapsed by default
-    resultSectionSet.forEach((section) => {
-      expect(section.display).toBe(false);
+    test('keeps sections expanded when chart count is small', () => {
+      const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
+        runsData: [createMockRunData(makeMetrics(50))],
+      });
+      resultSectionSet.forEach((section) => {
+        expect(section.display).toBe(true);
+      });
     });
-  });
-
-  test('sections are expanded when chart count is small', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(50)];
-
-    // ACT
-    const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
-    });
-
-    // ASSERT — sections should be open
-    resultSectionSet.forEach((section) => {
-      expect(section.display).toBe(true);
-    });
-  });
-
-  test('creates section groupings for 3000 metrics — all collapsed', () => {
-    // ARRANGE
-    const runsData = [createMockRunData(3000)];
-
-    // ACT
-    const { resultSectionSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
-    });
-
-    // ASSERT — sections are created and all collapsed (>100 charts triggers auto-collapse)
-    expect(resultSectionSet.length).toBeGreaterThan(0);
-    resultSectionSet.forEach((section) => {
-      expect(section.display).toBe(false);
-    });
-  });
-
-  test('multiple runs with overlapping metrics — no duplicates', () => {
-    // ARRANGE — 2 runs with same 500 metric keys
-    const runsData = [createMockRunData(500, 'run-1'), createMockRunData(500, 'run-2')];
-
-    // ACT
-    const { resultChartSet } = RunsChartsCardConfig.getBaseChartAndSectionConfigs({
-      runsData,
-    });
-
-    // ASSERT — should still be 500 charts, not 1000
-    const metricCharts = resultChartSet.filter((c) => c.type === RunsChartType.LINE || c.type === RunsChartType.BAR);
-    expect(metricCharts.length).toBe(500);
   });
 });
