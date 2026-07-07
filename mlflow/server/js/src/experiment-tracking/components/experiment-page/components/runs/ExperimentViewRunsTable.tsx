@@ -208,6 +208,17 @@ export const ExperimentViewRunsTable = React.memo(
     // Check if at least one run has custom visibility settings
     const usingCustomVisibility = shouldUseRunRowsVisibilityMap() && !isEmpty(uiState.runsVisibilityMap);
 
+    // Stable identifier for the current experiment context. Used to reset the
+    // cumulative column-key caches so keys don't leak across experiments.
+    const columnKeysResetKey = useMemo(
+      () =>
+        experiments
+          .map((experiment) => experiment.experimentId)
+          .sort()
+          .join(','),
+      [experiments],
+    );
+
     const columnDefs = useRunsColumnDefinitions({
       selectedColumns,
       onExpand: toggleRowExpanded,
@@ -217,6 +228,7 @@ export const ExperimentViewRunsTable = React.memo(
       metricKeyList: filteredMetricKeyList,
       paramKeyList: filteredParamKeyList,
       tagKeyList: filteredTagKeys,
+      resetKey: columnKeysResetKey,
       columnApi,
       isComparingRuns,
       onDatasetSelected,

@@ -11,6 +11,7 @@ import {
   ChevronDownIcon,
 } from '@databricks/design-system';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { middleTruncateStr } from '../../../../../common/utils/StringUtils';
 import { ATTRIBUTE_COLUMN_SORT_KEY, ATTRIBUTE_COLUMN_SORT_LABEL, COLUMN_TYPES } from '../../../../constants';
@@ -21,6 +22,13 @@ import { makeCanonicalSortKey } from '../../utils/experimentPage.common-utils';
 import { customMetricBehaviorDefs } from '../../utils/customMetricBehaviorUtils';
 
 type SORT_KEY_TYPE = keyof (typeof ATTRIBUTE_COLUMN_SORT_KEY & typeof ATTRIBUTE_COLUMN_SORT_LABEL);
+
+// Approximate rendered height (px) of a single sort option row, used by the
+// virtualizer to size the scroll area. Only on-screen rows are mounted, so the
+// full (unrestricted) list of metrics/params stays available without the DOM
+// bloat that froze the tab on experiments with thousands of metrics/params.
+const SORT_OPTION_ROW_HEIGHT = 32;
+const SORT_OPTIONS_MAX_HEIGHT = 400;
 
 const ExperimentViewRunsSortSelectorV2Body = ({
   sortOptions,
@@ -43,6 +51,7 @@ const ExperimentViewRunsSortSelectorV2Body = ({
   const inputElementRef = useRef<React.ComponentRef<typeof Input>>(null);
   const [filter, setFilter] = useState('');
   const firstElementRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Merge all sort options and filter them by the search query
   const filteredSortOptions = useMemo(
@@ -52,6 +61,16 @@ const ExperimentViewRunsSortSelectorV2Body = ({
       }),
     [sortOptions, filter],
   );
+
+  // Virtualize the option list so only the rows currently in view are mounted.
+  // This keeps the full list available (no cap) while avoiding thousands of
+  // DropdownMenu items in the DOM at once, which previously froze the tab.
+  const rowVirtualizer = useVirtualizer({
+    count: filteredSortOptions.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => SORT_OPTION_ROW_HEIGHT,
+    overscan: 10,
+  });
 
   const handleChange = (orderByKey: string) => {
     setUrlSearchFacets({
@@ -81,7 +100,13 @@ const ExperimentViewRunsSortSelectorV2Body = ({
   useEffect(() => {
     requestAnimationFrame(() => {
       inputElementRef.current?.focus();
+      // The dropdown mounts with an open animation, so the scroll container may
+      // report a height of 0 on first paint, leaving the virtualizer briefly
+      // mis-measured (rows can overlap until the first scroll). Force a re-measure
+      // once the popover has settled so the list renders correctly from the start.
+      rowVirtualizer.measure();
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -135,33 +160,51 @@ const ExperimentViewRunsSortSelectorV2Body = ({
           />
         </div>
       </div>
-      <DropdownMenu.Group css={{ maxHeight: 400, overflowY: 'auto' }}>
-        {filteredSortOptions.map((sortOption, index) => (
-          <DropdownMenu.CheckboxItem
-            componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunssortselectorv2.tsx_137"
-            key={sortOption.value}
-            onClick={() => handleChange(sortOption.value)}
-            checked={sortOption.value === orderByKey}
-            data-testid={`sort-select-${sortOption.label}`}
-            ref={index === 0 ? firstElementRef : undefined}
-          >
-            <DropdownMenu.ItemIndicator />
-            <span css={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {middleTruncateStr(sortOption.label, 50)}
-            </span>
-          </DropdownMenu.CheckboxItem>
-        ))}
-        {!filteredSortOptions.length && (
-          <DropdownMenu.Item
-            componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunssortselectorv2.tsx_151"
-            disabled
-          >
-            <FormattedMessage
-              defaultMessage="No results"
-              description="Experiment page > sort selector > no results after filtering by search query"
-            />
-          </DropdownMenu.Item>
-        )}
+      <DropdownMenu.Group>
+        <div ref={scrollContainerRef} css={{ maxHeight: SORT_OPTIONS_MAX_HEIGHT, overflowY: 'auto' }}>
+          {filteredSortOptions.length ? (
+            <div css={{ height: rowVirtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const sortOption = filteredSortOptions[virtualRow.index];
+                return (
+                  <div
+                    key={sortOption.value}
+                    css={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <DropdownMenu.CheckboxItem
+                      componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunssortselectorv2.tsx_137"
+                      onClick={() => handleChange(sortOption.value)}
+                      checked={sortOption.value === orderByKey}
+                      data-testid={`sort-select-${sortOption.label}`}
+                      ref={virtualRow.index === 0 ? firstElementRef : undefined}
+                    >
+                      <DropdownMenu.ItemIndicator />
+                      <span css={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {middleTruncateStr(sortOption.label, 50)}
+                      </span>
+                    </DropdownMenu.CheckboxItem>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <DropdownMenu.Item
+              componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunssortselectorv2.tsx_151"
+              disabled
+            >
+              <FormattedMessage
+                defaultMessage="No results"
+                description="Experiment page > sort selector > no results after filtering by search query"
+              />
+            </DropdownMenu.Item>
+          )}
+        </div>
       </DropdownMenu.Group>
     </>
   );

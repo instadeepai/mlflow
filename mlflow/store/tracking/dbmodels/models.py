@@ -270,6 +270,11 @@ class SqlRun(Base):
             name="runs_lifecycle_stage",
         ),
         PrimaryKeyConstraint("run_uuid", name="run_pk"),
+        # search_runs filters on (experiment_id, lifecycle_stage) for every
+        # experiment page load. PostgreSQL does not auto-index foreign-key
+        # columns, so without this index the query sequentially scans the
+        # entire runs table, which is very slow on large deployments.
+        Index("index_runs_experiment_id_lifecycle_stage", "experiment_id", "lifecycle_stage"),
     )
 
     @staticmethod
