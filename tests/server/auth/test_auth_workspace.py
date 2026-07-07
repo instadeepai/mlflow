@@ -23,6 +23,7 @@ from mlflow.server.auth.routes import (
 )
 from mlflow.server.auth.sqlalchemy_store import SqlAlchemyStore
 from mlflow.utils import workspace_context
+from mlflow.utils.mlflow_tags import MLFLOW_USER
 from mlflow.utils.workspace_utils import DEFAULT_WORKSPACE_NAME
 
 from tests.helper_functions import random_str
@@ -68,12 +69,16 @@ class _TrackingStore:
         gateway_secret_workspaces: dict[str, str] | None = None,
         gateway_endpoint_workspaces: dict[str, str] | None = None,
         gateway_model_def_workspaces: dict[str, str] | None = None,
+        run_users: dict[str, str] | None = None,
+        run_tags: dict[str, dict[str, str]] | None = None,
         engine=None,
         ManagedSessionMaker=None,
     ):
         self._experiment_workspaces = experiment_workspaces
         self._run_experiments = run_experiments
         self._trace_experiments = trace_experiments
+        self._run_users = run_users or {}
+        self._run_tags = run_tags or {}
         self._experiment_names = experiment_names or {}
         self._logged_model_experiments = logged_model_experiments or {}
         self._gateway_secret_workspaces = gateway_secret_workspaces or {}
@@ -95,7 +100,13 @@ class _TrackingStore:
         )
 
     def get_run(self, run_id: str):
-        return SimpleNamespace(info=SimpleNamespace(experiment_id=self._run_experiments[run_id]))
+        return SimpleNamespace(
+            info=SimpleNamespace(
+                experiment_id=self._run_experiments[run_id],
+                user_id=self._run_users.get(run_id),
+            ),
+            data=SimpleNamespace(tags=self._run_tags.get(run_id, {})),
+        )
 
     def get_trace_info(self, request_id: str):
         return SimpleNamespace(experiment_id=self._trace_experiments[request_id])
@@ -242,7 +253,15 @@ def workspace_permission_setup(tmp_path, monkeypatch):
 
     tracking_store = _TrackingStore(
         experiment_workspaces={"exp-1": "team-a", "exp-2": "team-a", "1": "team-a"},
-        run_experiments={"run-1": "exp-1", "run-2": "exp-2"},
+        run_experiments={
+            "run-1": "exp-1",
+            "run-2": "exp-2",
+            "run-owned-by-alice": "exp-1",
+            "run-owned-by-bob": "exp-1",
+            "run-tagged-alice": "exp-1",
+        },
+        run_users={"run-owned-by-alice": username, "run-owned-by-bob": "bob"},
+        run_tags={"run-tagged-alice": {MLFLOW_USER: username}},
         trace_experiments={"trace-1": "exp-1"},
         experiment_names={"Primary Experiment": "exp-1"},
         logged_model_experiments={"model-1": "exp-1"},
@@ -680,6 +699,50 @@ def test_run_validators_read_permission_blocks_writes(workspace_permission_setup
         assert not auth_module.validate_can_update_run()
         assert not auth_module.validate_can_delete_run()
         assert not auth_module.validate_can_manage_run()
+
+
+def test_delete_run_allowed_for_creator_without_manage(workspace_permission_setup):
+    # A run's creator can delete it even without MANAGE on the parent experiment.
+    store = workspace_permission_setup["store"]
+    username = workspace_permission_setup["username"]
+    _set_workspace_permission(store, username, READ.name)
+
+    with auth_module.app.test_request_context(
+        "/api/2.0/mlflow/runs/delete",
+        method="GET",
+        query_string={"run_id": "run-owned-by-alice"},
+    ):
+        assert auth_module.validate_can_delete_run()
+        # The ownership fallback only applies to deletion, not other writes.
+        assert not auth_module.validate_can_update_run()
+
+
+def test_delete_run_allowed_for_creator_via_user_tag(workspace_permission_setup):
+    # Ownership can also be established via the ``mlflow.user`` tag, not just RunInfo.user_id.
+    store = workspace_permission_setup["store"]
+    username = workspace_permission_setup["username"]
+    _set_workspace_permission(store, username, READ.name)
+
+    with auth_module.app.test_request_context(
+        "/api/2.0/mlflow/runs/delete",
+        method="GET",
+        query_string={"run_id": "run-tagged-alice"},
+    ):
+        assert auth_module.validate_can_delete_run()
+
+
+def test_delete_run_denied_for_non_creator_without_manage(workspace_permission_setup):
+    # A non-creator without MANAGE still cannot delete a run they don't own.
+    store = workspace_permission_setup["store"]
+    username = workspace_permission_setup["username"]
+    _set_workspace_permission(store, username, READ.name)
+
+    with auth_module.app.test_request_context(
+        "/api/2.0/mlflow/runs/delete",
+        method="GET",
+        query_string={"run_id": "run-owned-by-bob"},
+    ):
+        assert not auth_module.validate_can_delete_run()
 
 
 def test_logged_model_validators_respect_permissions(workspace_permission_setup):
