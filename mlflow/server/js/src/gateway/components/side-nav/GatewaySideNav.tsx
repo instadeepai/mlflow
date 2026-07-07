@@ -54,13 +54,6 @@ const navItems: Array<{
     to: GatewayRoutes.budgetsPageRoute,
     componentId: 'mlflow.gateway.side-nav.budgets.tooltip',
   },
-  {
-    tab: 'api-keys',
-    label: <FormattedMessage defaultMessage="API Keys" description="Gateway side nav > API Keys tab" />,
-    icon: <KeyIcon />,
-    to: GatewayRoutes.apiKeysPageRoute,
-    componentId: 'mlflow.gateway.side-nav.api-keys.tooltip',
-  },
 ];
 
 export const GatewaySideNav = ({ activeTab }: GatewaySideNavProps) => {
