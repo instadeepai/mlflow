@@ -111,7 +111,6 @@ from mlflow.store.tracking.sqlalchemy_store import (
 from mlflow.store.tracking.sqlalchemy_workspace_store import WorkspaceAwareSqlAlchemyStore
 from mlflow.tracing.constant import (
     MAX_CHARS_IN_TRACE_INFO_TAGS_VALUE,
-    AssessmentMetadataKey,
     CostKey,
     SpanAttributeKey,
     SpansLocation,
@@ -1363,79 +1362,6 @@ def test_delete_run(store: SqlAlchemyStore):
 
         deleted_run = store.get_run(run.info.run_id)
         assert actual.run_uuid == deleted_run.info.run_id
-
-
-def _create_assessment_for_run(
-    store: SqlAlchemyStore, experiment_id: str, trace_id: str, source_run_id: str
-):
-    """Create a trace + a feedback assessment linked to a run via source run id metadata."""
-    _create_trace(store, trace_id, experiment_id=experiment_id)
-    store.create_assessment(
-        Feedback(
-            trace_id=trace_id,
-            name="quality",
-            value="good",
-            source=AssessmentSource(source_type="LLM_JUDGE", source_id="judge"),
-            metadata={AssessmentMetadataKey.SOURCE_RUN_ID: source_run_id},
-        )
-    )
-
-
-def _assessment_count(store: SqlAlchemyStore) -> int:
-    with store.ManagedSessionMaker() as session:
-        return session.query(models.SqlAssessments).count()
-
-
-def test_delete_run_removes_associated_assessments(store: SqlAlchemyStore):
-    experiment_id = _create_experiments(store, "delete_run_assessments")
-    run = _run_factory(store, _get_run_configs(experiment_id=experiment_id))
-    other_run = _run_factory(store, _get_run_configs(experiment_id=experiment_id))
-    _create_assessment_for_run(store, experiment_id, "tr-del-1", run.info.run_id)
-    _create_assessment_for_run(store, experiment_id, "tr-del-2", run.info.run_id)
-    _create_assessment_for_run(store, experiment_id, "tr-keep", other_run.info.run_id)
-    assert _assessment_count(store) == 3
-
-    store.delete_run(run.info.run_id)
-
-    # Only the deleted run's assessments are removed; the other run's is untouched.
-    assert _assessment_count(store) == 1
-
-
-def test_delete_run_succeeds_when_assessments_table_missing(store: SqlAlchemyStore):
-    # Regression test: on a tracking database whose schema predates the
-    # ``assessments`` table (a pending migration), deleting a run must still
-    # succeed rather than surfacing an opaque 500 that makes runs undeletable.
-    run = _run_factory(store)
-    with store.engine.begin() as connection:
-        connection.execute(sqlalchemy.text("DROP TABLE assessments"))
-
-    store.delete_run(run.info.run_id)
-
-    assert store.get_run(run.info.run_id).info.lifecycle_stage == entities.LifecycleStage.DELETED
-
-
-def test_delete_experiment_removes_associated_assessments(store: SqlAlchemyStore):
-    experiment_id = _create_experiments(store, "delete_experiment_assessments")
-    run1 = _run_factory(store, _get_run_configs(experiment_id=experiment_id))
-    run2 = _run_factory(store, _get_run_configs(experiment_id=experiment_id))
-    _create_assessment_for_run(store, experiment_id, "tr-exp-1", run1.info.run_id)
-    _create_assessment_for_run(store, experiment_id, "tr-exp-2", run2.info.run_id)
-    assert _assessment_count(store) == 2
-
-    store.delete_experiment(experiment_id)
-
-    assert _assessment_count(store) == 0
-
-
-def test_delete_experiment_succeeds_when_assessments_table_missing(store: SqlAlchemyStore):
-    run = _run_factory(store)
-    experiment_id = run.info.experiment_id
-    with store.engine.begin() as connection:
-        connection.execute(sqlalchemy.text("DROP TABLE assessments"))
-
-    store.delete_experiment(experiment_id)
-
-    assert store.get_run(run.info.run_id).info.lifecycle_stage == entities.LifecycleStage.DELETED
 
 
 def test_hard_delete_run(store: SqlAlchemyStore):

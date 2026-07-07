@@ -280,6 +280,7 @@ from mlflow.server.workspace_helpers import _get_workspace_store
 from mlflow.store.entities import PagedList
 from mlflow.store.workspace.utils import get_default_workspace_optional
 from mlflow.utils import workspace_context
+from mlflow.utils.mlflow_tags import MLFLOW_USER
 from mlflow.utils.proto_json_utils import message_to_json, parse_dict
 from mlflow.utils.rest_utils import _REST_API_PATH_PREFIX
 from mlflow.utils.search_utils import SearchUtils
@@ -1092,8 +1093,34 @@ def validate_can_update_run():
     return _get_permission_from_run_id().can_update
 
 
+def _authenticated_user_is_run_creator(run) -> bool:
+    """Return True when the authenticated user created ``run``.
+
+    Runs inherit their permission from the parent experiment, so run ownership
+    is not tracked in the permission store. Fall back to the creator recorded on
+    the run itself -- ``RunInfo.user_id`` and the ``mlflow.user`` tag -- matched
+    case-insensitively against the authenticated username.
+    """
+    username = authenticate_request().username
+    if not username:
+        return False
+    creators = set()
+    if run.info.user_id:
+        creators.add(run.info.user_id)
+    if tag_user := run.data.tags.get(MLFLOW_USER):
+        creators.add(tag_user)
+    return any(creator.lower() == username.lower() for creator in creators)
+
+
 def validate_can_delete_run():
-    return _get_permission_from_run_id().can_delete
+    if _get_permission_from_run_id().can_delete:
+        return True
+    # A user who created a run inside an experiment they don't manage (e.g. one
+    # imported/migrated from another environment) lacks MANAGE on the parent
+    # experiment and would otherwise be unable to delete their own run. Allow the
+    # run's creator to delete (and restore) it.
+    run = _get_tracking_store().get_run(_get_request_param("run_id"))
+    return _authenticated_user_is_run_creator(run)
 
 
 def validate_can_manage_run():
