@@ -2,6 +2,7 @@ import {
   ChainIcon,
   ChartLineIcon,
   CreditCardIcon,
+  KeyIcon,
   Tooltip,
   Typography,
   useDesignSystemTheme,
@@ -15,12 +16,13 @@ const SIDE_NAV_COLLAPSED_WIDTH = 32;
 const COLLAPSED_CLASS_NAME = 'gateway-side-nav-collapsed';
 const FULL_WIDTH_CLASS_NAME = 'gateway-side-nav-full-width';
 
-export type GatewayTab = 'endpoints' | 'usage' | 'budgets';
+export type GatewayTab = 'endpoints' | 'usage' | 'budgets' | 'api-keys';
 
 type GatewaySideNavComponentId =
   | 'mlflow.gateway.side-nav.endpoints.tooltip'
   | 'mlflow.gateway.side-nav.usage.tooltip'
-  | 'mlflow.gateway.side-nav.budgets.tooltip';
+  | 'mlflow.gateway.side-nav.budgets.tooltip'
+  | 'mlflow.gateway.side-nav.api-keys.tooltip';
 
 interface GatewaySideNavProps {
   activeTab: GatewayTab;
