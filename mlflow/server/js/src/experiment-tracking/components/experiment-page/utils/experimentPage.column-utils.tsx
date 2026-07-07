@@ -153,6 +153,12 @@ export interface UseRunsColumnDefinitionsParams {
   metricKeyList: string[];
   paramKeyList: string[];
   tagKeyList: string[];
+  /**
+   * Value-compared identifier of the current context (e.g. sorted experiment ids).
+   * When it changes, the internal cumulative key caches are reset so keys from a
+   * previously viewed experiment don't leak into the current one.
+   */
+  resetKey?: string;
   columnApi?: ColumnApi;
   isComparingRuns?: boolean;
   onDatasetSelected?: (dataset: RunDatasetWithTags, run: RunRowType) => void;
@@ -194,34 +200,39 @@ const useCumulativeColumnKeys = ({
   paramKeyList,
   metricKeyList,
   tagKeyList,
-}: Pick<UseRunsColumnDefinitionsParams, 'tagKeyList' | 'metricKeyList' | 'paramKeyList'>) => {
+  resetKey,
+}: Pick<UseRunsColumnDefinitionsParams, 'tagKeyList' | 'metricKeyList' | 'paramKeyList'> & {
+  resetKey?: string;
+}) => {
   const cachedMetricKeys = useRef<Set<string>>(new Set());
   const cachedParamKeys = useRef<Set<string>>(new Set());
   const cachedTagKeys = useRef<Set<string>>(new Set());
+  const lastResetKey = useRef(resetKey);
 
-  const paramKeys = useMemo(() => {
+  const cumulativeColumns = useMemo(() => {
+    // The caches intentionally accumulate keys so columns don't flicker as the
+    // loaded run set changes (e.g. paging or reverse sorting). Without a reset
+    // they would also grow forever and leak keys across *different* experiments,
+    // making the column set (and the "large column count" optimization threshold)
+    // creep up over a long session. Reset them whenever the context (`resetKey`,
+    // a value-compared string such as the sorted experiment ids) changes.
+    if (lastResetKey.current !== resetKey) {
+      cachedMetricKeys.current = new Set();
+      cachedParamKeys.current = new Set();
+      cachedTagKeys.current = new Set();
+      lastResetKey.current = resetKey;
+    }
+
     paramKeyList.forEach((key) => cachedParamKeys.current.add(key));
-    return Array.from(cachedParamKeys.current);
-  }, [paramKeyList]);
-
-  const metricKeys = useMemo(() => {
     metricKeyList.forEach((key) => cachedMetricKeys.current.add(key));
-    return Array.from(cachedMetricKeys.current);
-  }, [metricKeyList]);
-
-  const tagKeys = useMemo(() => {
     tagKeyList.forEach((key) => cachedTagKeys.current.add(key));
-    return Array.from(cachedTagKeys.current);
-  }, [tagKeyList]);
 
-  const cumulativeColumns = useMemo(
-    () => ({
-      paramKeys,
-      metricKeys,
-      tagKeys,
-    }),
-    [metricKeys, paramKeys, tagKeys],
-  );
+    return {
+      paramKeys: Array.from(cachedParamKeys.current),
+      metricKeys: Array.from(cachedMetricKeys.current),
+      tagKeys: Array.from(cachedTagKeys.current),
+    };
+  }, [paramKeyList, metricKeyList, tagKeyList, resetKey]);
 
   return cumulativeColumns;
 };
@@ -244,6 +255,7 @@ export const useRunsColumnDefinitions = ({
   paramKeyList,
   metricKeyList,
   tagKeyList,
+  resetKey,
   columnApi,
   onDatasetSelected,
   isComparingRuns,
@@ -256,6 +268,7 @@ export const useRunsColumnDefinitions = ({
     metricKeyList,
     tagKeyList,
     paramKeyList,
+    resetKey,
   });
 
   // Generate columns differently on super small viewport sizes

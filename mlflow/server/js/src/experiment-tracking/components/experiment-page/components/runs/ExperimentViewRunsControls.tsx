@@ -73,7 +73,9 @@ export const ExperimentViewRunsControls = React.memo(
 
     const filteredParamKeys = paramKeyList;
     const filteredMetricKeys = metricKeyList;
-    const filteredTagKeys = Utils.getVisibleTagKeyList(tagsList);
+    // getVisibleTagKeyList is O(runs * tags); memoize so it doesn't re-run on
+    // every render (and doesn't churn the identity of downstream callbacks).
+    const filteredTagKeys = useMemo(() => Utils.getVisibleTagKeyList(tagsList), [tagsList]);
 
     const onDownloadCsv = useCallback(
       () => downloadRunsCsv(runsData, filteredTagKeys, filteredParamKeys, filteredMetricKeys),

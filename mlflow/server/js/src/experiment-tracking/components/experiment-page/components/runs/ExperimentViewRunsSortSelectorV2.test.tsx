@@ -12,6 +12,28 @@ jest.setTimeout(30000);
 const metricKeys = ['metric_alpha', 'metric_beta'];
 const paramKeys = ['param_1', 'param_2', 'param_3'];
 
+// The sort option list is virtualized. jsdom has no layout, so the virtualizer
+// would measure a 0-height scroll container and render nothing. Mock it to
+// render every row (matching the pattern used by other virtualized components).
+jest.mock('@tanstack/react-virtual', () => {
+  const actual = jest.requireActual<typeof import('@tanstack/react-virtual')>('@tanstack/react-virtual');
+  return {
+    ...actual,
+    useVirtualizer: (opts: any) => ({
+      getVirtualItems: () =>
+        Array.from({ length: opts.count }, (_, i) => ({
+          index: i,
+          key: i,
+          start: i * 32,
+          size: 32,
+          measureElement: () => {},
+        })),
+      getTotalSize: () => opts.count * 32,
+      measureElement: () => {},
+    }),
+  };
+});
+
 jest.mock('../../../../../common/utils/RoutingUtils', () => {
   const params = new URLSearchParams();
   const setSearchParamsMock = jest.fn((setter: (newParams: URLSearchParams) => URLSearchParams) => setter(params));
