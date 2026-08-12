@@ -779,7 +779,6 @@ module.exports = {
   "graph-view-toolbar.zoom-out-button": "",
   mlflow_column_selector_clear_selected: "",
   "mlflow_header.toggle_sidebar_button": "",
-  mlflow_show_more_charts: "",
   mlflow_show_more_sections: "",
   "open-modal": "",
   promptType: "",
