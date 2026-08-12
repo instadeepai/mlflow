@@ -303,6 +303,15 @@ export const RunsChartsLineChartCard = ({
     }
   };
 
+  // Dropping the stored range puts both axes back on autorange, which is how the chart
+  // renders before anyone zooms.
+  const resetViewport = useCallback(() => {
+    destroyTooltip();
+    setXRangeLocal(undefined);
+    setYRangeLocal(undefined);
+    setOffsetTimestamp(undefined);
+  }, [destroyTooltip, setXRangeLocal, setOffsetTimestamp]);
+
   useEffect(() => {
     destroyTooltip();
   }, [destroyTooltip, isLoading]);
@@ -377,6 +386,7 @@ export const RunsChartsLineChartCard = ({
           onUpdate={chartLayoutUpdated}
           xRange={xRangeLocal}
           yRange={yRangeLocal}
+          onResetViewport={resetViewport}
           fullScreen={fullScreen}
           displayPoints={config.displayPoints}
           onSetDownloadHandler={setImageDownloadHandler}
