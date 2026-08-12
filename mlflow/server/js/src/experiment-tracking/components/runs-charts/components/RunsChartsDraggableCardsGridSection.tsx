@@ -1,5 +1,5 @@
-import { Empty, useDesignSystemTheme } from '@databricks/design-system';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Button, Empty, useDesignSystemTheme } from '@databricks/design-system';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateRunsChartsUIConfiguration } from '../hooks/useRunsChartsUIConfiguration';
 import type { RunsChartsCardConfig } from '../runs-charts.types';
 import type { RunsChartsRunData } from './RunsCharts.common';
@@ -18,7 +18,14 @@ import { DRAGGABLE_CARD_TRANSITION_NAME, type RunsChartCardSetFullscreenFn } fro
 import type { RunsGroupByConfig } from '../../experiment-page/utils/experimentPage.group-row-utils';
 import type { RunsChartsGlobalLineChartConfig } from '../../experiment-page/models/ExperimentPageUIState';
 
+const CHARTS_PER_PAGE = 50;
 const rowHeightSuggestions = [300, 330, 360, 400, 500];
+
+const showMoreWrapperStyles = (theme: { spacing: { md: number } }) => ({
+  display: 'flex',
+  justifyContent: 'center',
+  padding: theme.spacing.md,
+});
 
 const getColumnSuggestions = (containerWidth: number, gapSize = 8) =>
   [1, 2, 3, 4, 5].map((n) => ({
@@ -125,14 +132,13 @@ export const RunsChartsDraggableCardsGridSection = memo(
     const [positionInSection, setPositionInSection] = useState<number | null>(null);
     const [resizePreview, setResizePreview] = useState<null | Partial<DOMRect>>(null);
 
-    lastElementCount.current = cardsConfig.length;
     const position = !draggedCardUuid ? null : positionInSection;
 
     // Helper function that calculates the x, y coordinates of a card based on its position in the grid
     const findCoords = useCallback(
       (position) => {
         const gap = theme.spacing.sm;
-        const rowCount = Math.ceil(cardsConfig.length / columns);
+        const rowCount = Math.ceil(lastElementCount.current / columns);
 
         const row = Math.floor(position / columns);
         const col = position % columns;
@@ -155,10 +161,10 @@ export const RunsChartsDraggableCardsGridSection = memo(
           y: row * cardHeight + passedRowGaps * gap,
         };
       },
-      [columns, cardHeight, theme, cardsConfig.length],
+      [columns, cardHeight, theme],
     );
 
-    const cardsToRender = useMemo(() => {
+    const allFilteredCards = useMemo(() => {
       const isEmptyChartCard = createEmptyChartCardPredicate(chartRunData);
       return cardsConfig.filter((cardConfig) => {
         if (!hideEmptyCharts) {
@@ -167,6 +173,20 @@ export const RunsChartsDraggableCardsGridSection = memo(
         return !isEmptyChartCard(cardConfig);
       });
     }, [cardsConfig, chartRunData, hideEmptyCharts]);
+
+    const [visibleCount, setVisibleCount] = useState(CHARTS_PER_PAGE);
+    // Reset pagination when the filtered card list changes (e.g., switching experiments
+    // or filters). Keying off the array reference catches changes that preserve length,
+    // such as switching to a same-sized set of different metrics.
+    useEffect(() => {
+      setVisibleCount(CHARTS_PER_PAGE);
+    }, [allFilteredCards]);
+    const cardsToRender = useMemo(() => {
+      return allFilteredCards.slice(0, visibleCount);
+    }, [allFilteredCards, visibleCount]);
+    lastElementCount.current = cardsToRender.length;
+    const hasMoreCards = allFilteredCards.length > visibleCount;
+    const remainingCards = allFilteredCards.length - visibleCount;
 
     // Calculate the transforms for each card based on the dragged card and its position.
     const cardTransforms = useMemo(() => {
@@ -310,84 +330,108 @@ export const RunsChartsDraggableCardsGridSection = memo(
     );
 
     return (
-      <div
-        ref={gridBoxRef}
-        css={[
-          { position: 'relative' },
-          cardsToRender.length > 0 && {
-            display: 'grid',
-            gap: theme.spacing.sm,
-          },
-        ]}
-        style={{
-          gridTemplateColumns: 'repeat(' + columns + ', 1fr)',
-          ...(draggedCardUuid && {
-            [DRAGGABLE_CARD_TRANSITION_NAME]: 'transform 0.1s',
-          }),
-        }}
-        data-testid="draggable-chart-cards-grid"
-        onMouseMove={mouseMove}
-        onMouseLeave={() => {
-          setPositionInSection(null);
-        }}
-      >
-        {(draggedCardUuid || resizePreview) && (
-          <Global
-            styles={{
-              'body, :host': {
-                userSelect: 'none',
-              },
-            }}
-          />
-        )}
-        {cardsToRender.length === 0 && (
-          <div css={{ display: 'flex', justifyContent: 'center', minHeight: 160 }}>
-            <Empty
-              title={
-                <FormattedMessage
-                  defaultMessage="No charts in this section"
-                  description="Runs compare page > Charts tab > No charts placeholder title"
-                />
-              }
-              description={
-                <FormattedMessage
-                  defaultMessage="Click 'Add chart' or drag and drop to add charts here."
-                  description="Runs compare page > Charts tab > No charts placeholder description"
-                />
-              }
+      <>
+        <div
+          ref={gridBoxRef}
+          css={[
+            { position: 'relative' },
+            cardsToRender.length > 0 && {
+              display: 'grid',
+              gap: theme.spacing.sm,
+            },
+          ]}
+          style={{
+            gridTemplateColumns: 'repeat(' + columns + ', 1fr)',
+            ...(draggedCardUuid && {
+              [DRAGGABLE_CARD_TRANSITION_NAME]: 'transform 0.1s',
+            }),
+          }}
+          data-testid="draggable-chart-cards-grid"
+          onMouseMove={mouseMove}
+          onMouseLeave={() => {
+            setPositionInSection(null);
+          }}
+        >
+          {(draggedCardUuid || resizePreview) && (
+            <Global
+              styles={{
+                'body, :host': {
+                  userSelect: 'none',
+                },
+              }}
             />
+          )}
+          {cardsToRender.length === 0 && (
+            <div css={{ display: 'flex', justifyContent: 'center', minHeight: 160 }}>
+              <Empty
+                title={
+                  <FormattedMessage
+                    defaultMessage="No charts in this section"
+                    description="Runs compare page > Charts tab > No charts placeholder title"
+                  />
+                }
+                description={
+                  <FormattedMessage
+                    defaultMessage="Click 'Add chart' or drag and drop to add charts here."
+                    description="Runs compare page > Charts tab > No charts placeholder description"
+                  />
+                }
+              />
+            </div>
+          )}
+          {cardsToRender.map((cardConfig, index) => {
+            // Reorder math is computed against the full filtered list (not the paginated slice)
+            // so "move down/to bottom" works across pages, not just within the visible page.
+            const fullIndex = allFilteredCards.indexOf(cardConfig);
+            const previousCard = fullIndex > 0 ? allFilteredCards[fullIndex - 1] : undefined;
+            const nextCard = fullIndex >= 0 ? allFilteredCards[fullIndex + 1] : undefined;
+            return (
+              <RunsChartsDraggableCard
+                key={cardConfig.uuid}
+                uuid={cardConfig.uuid ?? ''}
+                translateBy={cardTransforms[cardConfig.uuid ?? '']}
+                onResizeStart={onResizeStart}
+                onResizeStop={onResizeStop}
+                onResize={onResize}
+                cardConfig={cardConfig}
+                chartRunData={chartRunData}
+                onReorderWith={onSwapCards}
+                index={index}
+                height={cardHeight}
+                canMoveDown={Boolean(nextCard)}
+                canMoveUp={Boolean(previousCard)}
+                canMoveToTop={fullIndex > 0}
+                canMoveToBottom={fullIndex >= 0 && fullIndex < allFilteredCards.length - 1}
+                previousChartUuid={previousCard?.uuid}
+                nextChartUuid={nextCard?.uuid}
+                hideEmptyCharts={hideEmptyCharts}
+                firstChartUuid={allFilteredCards[0]?.uuid}
+                lastChartUuid={allFilteredCards[allFilteredCards.length - 1]?.uuid}
+                {...cardProps}
+              />
+            );
+          })}
+          {dragPreview && <RunsChartsDraggablePreview {...dragPreview} />}
+          {resizePreview && <RunsChartsDraggablePreview {...resizePreview} />}
+        </div>
+        {hasMoreCards && (
+          <div css={showMoreWrapperStyles(theme)}>
+            <Button
+              componentId="mlflow_show_more_charts"
+              onClick={() => setVisibleCount((prev) => prev + CHARTS_PER_PAGE)}
+            >
+              <FormattedMessage
+                defaultMessage="Show {count} more {count, plural, one {chart} other {charts}} ({remaining} remaining)"
+                description="Runs compare page > Charts tab > Show more charts button label"
+                values={{
+                  count: Math.min(remainingCards, CHARTS_PER_PAGE),
+                  remaining: remainingCards,
+                }}
+              />
+            </Button>
           </div>
         )}
-        {cardsToRender.map((cardConfig, index, array) => {
-          return (
-            <RunsChartsDraggableCard
-              key={cardConfig.uuid}
-              uuid={cardConfig.uuid ?? ''}
-              translateBy={cardTransforms[cardConfig.uuid ?? '']}
-              onResizeStart={onResizeStart}
-              onResizeStop={onResizeStop}
-              onResize={onResize}
-              cardConfig={cardConfig}
-              chartRunData={chartRunData}
-              onReorderWith={onSwapCards}
-              index={index}
-              height={cardHeight}
-              canMoveDown={Boolean(array[index + 1])}
-              canMoveUp={Boolean(array[index - 1])}
-              canMoveToTop={index > 0}
-              canMoveToBottom={index < array.length - 1}
-              previousChartUuid={array[index - 1]?.uuid}
-              nextChartUuid={array[index + 1]?.uuid}
-              hideEmptyCharts={hideEmptyCharts}
-              firstChartUuid={array[0]?.uuid}
-              lastChartUuid={array[array.length - 1]?.uuid}
-              {...cardProps}
-            />
-          );
-        })}
-        {dragPreview && <RunsChartsDraggablePreview {...dragPreview} />}
-        {resizePreview && <RunsChartsDraggablePreview {...resizePreview} />}
-      </div>
+      </>
     );
   },
 );

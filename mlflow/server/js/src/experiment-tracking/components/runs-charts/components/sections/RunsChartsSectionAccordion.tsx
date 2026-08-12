@@ -14,9 +14,8 @@ import { RunsChartType } from '../../runs-charts.types';
 import MetricChartsAccordion, { METRIC_CHART_SECTION_HEADER_SIZE } from '../../../MetricChartsAccordion';
 import { RunsChartsSectionHeader } from './RunsChartsSectionHeader';
 import { RunsChartsSection } from './RunsChartsSection';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getUUID } from '@mlflow/mlflow/src/common/utils/ActionUtils';
-import { useState } from 'react';
 import { Button, PlusIcon } from '@databricks/design-system';
 import { FormattedMessage } from 'react-intl';
 import { Empty } from '@databricks/design-system';
@@ -316,6 +315,35 @@ export const RunsChartsSectionAccordion = ({
     return { sectionsToRender: compareRunSectionsFiltered, chartsToRender: compareRunChartsFiltered };
   }, [search, compareRunCharts, compareRunSections]);
 
+  // Pre-compute section→charts mapping to avoid O(n²) filtering
+  const chartsBySectionId = useMemo(() => {
+    const map: Record<string, RunsChartsCardConfig[]> = {};
+    for (const config of chartsToRender || []) {
+      if (config.deleted) continue;
+      const sectionId = config.metricSectionId;
+      if (sectionId) {
+        if (!map[sectionId]) map[sectionId] = [];
+        map[sectionId].push(config);
+      }
+    }
+    return map;
+  }, [chartsToRender]);
+
+  const SECTIONS_PER_PAGE = 20;
+  const [visibleSectionCount, setVisibleSectionCount] = useState(SECTIONS_PER_PAGE);
+  // Reset section pagination when the section list changes (e.g., switching experiments
+  // or applying a different search filter) so the user doesn't carry over a large visible
+  // count into a context where it negates the performance benefit.
+  useEffect(() => {
+    setVisibleSectionCount(SECTIONS_PER_PAGE);
+  }, [sectionsToRender]);
+  const totalSections = (sectionsToRender || []).length;
+  const paginatedSections = useMemo(
+    () => (sectionsToRender || []).slice(0, visibleSectionCount),
+    [sectionsToRender, visibleSectionCount],
+  );
+  const hasMoreSections = totalSections > visibleSectionCount;
+
   const isSearching = search !== '';
 
   if (!compareRunSections || !compareRunCharts) {
@@ -365,11 +393,8 @@ export const RunsChartsSectionAccordion = ({
   return (
     <div>
       <MetricChartsAccordion activeKey={activeKey} onActiveKeyChange={onActivePanelChange}>
-        {(sectionsToRender || []).map((sectionConfig: ChartSectionConfig, index: number) => {
-          const sectionCharts = (chartsToRender || []).filter((config: RunsChartsCardConfig) => {
-            const section = (config as RunsChartsBarCardConfig).metricSectionId;
-            return !config.deleted && section === sectionConfig.uuid;
-          });
+        {paginatedSections.map((sectionConfig: ChartSectionConfig, index: number) => {
+          const sectionCharts = chartsBySectionId[sectionConfig.uuid] || [];
 
           return (
             <Accordion.Panel
@@ -415,6 +440,23 @@ export const RunsChartsSectionAccordion = ({
           );
         })}
       </MetricChartsAccordion>
+      {hasMoreSections && (
+        <div css={{ display: 'flex', justifyContent: 'center', padding: theme.spacing.md }}>
+          <Button
+            componentId="mlflow_show_more_sections"
+            onClick={() => setVisibleSectionCount((prev) => prev + SECTIONS_PER_PAGE)}
+          >
+            <FormattedMessage
+              defaultMessage="Show {count} more {count, plural, one {section} other {sections}} ({remaining} remaining)"
+              description="Experiment page > compare runs > chart section accordion > show more sections button"
+              values={{
+                count: Math.min(totalSections - visibleSectionCount, SECTIONS_PER_PAGE),
+                remaining: totalSections - visibleSectionCount,
+              }}
+            />
+          </Button>
+        </div>
+      )}
       {!isSearching && (
         <div>
           <Button
