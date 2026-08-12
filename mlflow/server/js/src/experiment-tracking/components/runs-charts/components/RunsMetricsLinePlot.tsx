@@ -382,6 +382,13 @@ export interface RunsMetricsLinePlotProps extends RunsPlotsCommonProps {
   lockXAxisZoom?: boolean;
 
   /**
+   * Called when the user double-clicks the plot to restore the default viewport.
+   * Consumers that keep xRange/yRange in their own state must clear it here, since
+   * providing this callback turns off plotly's built-in double-click handling.
+   */
+  onResetViewport?: () => void;
+
+  /**
    * Display points on the line chart. Undefined means "auto" mode, i.e. display points only when
    * there are fewer than 60 datapoints on the chart.
    */
@@ -399,6 +406,12 @@ const PLOT_CONFIG: Partial<Config> = {
   doubleClick: 'autosize',
   scrollZoom: false,
   modeBarButtonsToRemove: ['toImage'],
+};
+
+/** Used when the consumer resets the viewport itself; see handleDoubleClick for why. */
+const PLOT_CONFIG_WITHOUT_DOUBLE_CLICK: Partial<Config> = {
+  ...PLOT_CONFIG,
+  doubleClick: false,
 };
 
 const createTooltipTemplate = (runName: string) =>
@@ -518,6 +531,7 @@ export const RunsMetricsLinePlot = React.memo(
     xRange,
     yRange,
     lockXAxisZoom,
+    onResetViewport,
     fullScreen,
     displayPoints,
     onSetDownloadHandler,
@@ -806,6 +820,30 @@ export const RunsMetricsLinePlot = React.memo(
      */
     const mutableHoverCallback = useMutableChartHoverCallback(hoverCallbackMultipleRuns);
 
+    /**
+     * Restores the default viewport on double-click, in place of plotly's built-in handling.
+     *
+     * Two things have to happen together. The consumer drops the range it stores, otherwise it is
+     * handed straight back as a new layout. Plotly is then put back on autorange through the plain
+     * relayout API, otherwise the relayout it fires right after the double-click still reports the
+     * zoomed range and the consumer stores it again.
+     *
+     * Plotly's own reset cannot be used for the second half: it goes through the GUI relayout path,
+     * which records the change as a user edit that every later react() call re-applies on top of the
+     * layout this component supplies. The two never agree, so each render triggers another, and the
+     * tab spins until it is killed.
+     */
+    const handleDoubleClick = useCallback(() => {
+      onResetViewport?.();
+
+      const graphDiv = containerDiv?.querySelector('.js-plotly-plot');
+      if (graphDiv) {
+        import('../../PlotlyFactory').then(({ Plotly }) =>
+          Plotly.relayout(graphDiv as HTMLElement, { 'xaxis.autorange': true, 'yaxis.autorange': true }),
+        );
+      }
+    }, [onResetViewport, containerDiv]);
+
     // Prepare data for image download handler
     useEffect(() => {
       // Check if we are using multiple metric keys. If so, we also need to append
@@ -847,7 +885,8 @@ export const RunsMetricsLinePlot = React.memo(
             onUpdate?.(figure, graphDiv);
           }}
           layout={immediateLayout}
-          config={PLOT_CONFIG}
+          config={onResetViewport ? PLOT_CONFIG_WITHOUT_DOUBLE_CLICK : PLOT_CONFIG}
+          onDoubleClick={onResetViewport ? handleDoubleClick : undefined}
           onHover={mutableHoverCallback}
           onUnhover={unhoverCallbackMultipleRuns}
           onInitialized={initHandler}

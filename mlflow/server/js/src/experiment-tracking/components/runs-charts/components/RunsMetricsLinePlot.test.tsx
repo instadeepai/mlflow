@@ -51,4 +51,23 @@ describe('RunsMetricsLinePlot', () => {
     expect(getLastRenderedPlotProps().data[0]).toEqual(expect.objectContaining({ y: [10, 20, 30] }));
     cleanup();
   });
+
+  test('it should keep plotly double-click handling when the viewport is not externally controlled', () => {
+    renderWithIntl(<RunsMetricsLinePlot {...defaultProps} />);
+    expect(getLastRenderedPlotProps().config).toEqual(expect.objectContaining({ doubleClick: 'autosize' }));
+    cleanup();
+  });
+
+  test('it should hand double-click over to the consumer when onResetViewport is given', () => {
+    // Plotly resizing on double-click while the consumer stores the resulting range
+    // makes the two fight each other indefinitely, so plotly must stay out of it.
+    const onResetViewport = jest.fn();
+    renderWithIntl(<RunsMetricsLinePlot {...defaultProps} onResetViewport={onResetViewport} />);
+
+    expect(getLastRenderedPlotProps().config).toEqual(expect.objectContaining({ doubleClick: false }));
+
+    getLastRenderedPlotProps().onDoubleClick?.();
+    expect(onResetViewport).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
 });
