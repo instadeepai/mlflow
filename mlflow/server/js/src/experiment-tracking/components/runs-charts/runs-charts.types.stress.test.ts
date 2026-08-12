@@ -1,3 +1,4 @@
+import { describe, test, expect } from '@jest/globals';
 import { RunsChartsCardConfig, RunsChartType } from './runs-charts.types';
 import type { RunsChartsRunData } from './components/RunsCharts.common';
 import type { MetricEntitiesByName } from '../../types';
