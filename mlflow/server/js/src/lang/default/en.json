@@ -9119,10 +9119,6 @@
     "defaultMessage": "Copy artifact location",
     "description": "Copy tooltip to copy experiment artifact location from experiment runs table header"
   },
-  "cSc3Ue": {
-    "defaultMessage": "Show {count} more {count, plural, one {chart} other {charts}} ({remaining} remaining)",
-    "description": "Runs compare page > Charts tab > Show more charts button label"
-  },
   "cTe9VI": {
     "defaultMessage": "Delete",
     "description": "Gateway > API keys list > Delete button"

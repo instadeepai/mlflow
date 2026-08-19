@@ -1,5 +1,5 @@
-import { Button, Empty, useDesignSystemTheme } from '@databricks/design-system';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Empty, useDesignSystemTheme } from '@databricks/design-system';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useUpdateRunsChartsUIConfiguration } from '../hooks/useRunsChartsUIConfiguration';
 import type { RunsChartsCardConfig } from '../runs-charts.types';
 import type { RunsChartsRunData } from './RunsCharts.common';
@@ -17,15 +17,9 @@ import { RunsChartsDraggablePreview } from './RunsChartsDraggablePreview';
 import { DRAGGABLE_CARD_TRANSITION_NAME, type RunsChartCardSetFullscreenFn } from './cards/ChartCard.common';
 import type { RunsGroupByConfig } from '../../experiment-page/utils/experimentPage.group-row-utils';
 import type { RunsChartsGlobalLineChartConfig } from '../../experiment-page/models/ExperimentPageUIState';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
-const CHARTS_PER_PAGE = 50;
 const rowHeightSuggestions = [300, 330, 360, 400, 500];
-
-const showMoreWrapperStyles = (theme: { spacing: { md: number } }) => ({
-  display: 'flex',
-  justifyContent: 'center',
-  padding: theme.spacing.md,
-});
 
 const getColumnSuggestions = (containerWidth: number, gapSize = 8) =>
   [1, 2, 3, 4, 5].map((n) => ({
@@ -34,6 +28,49 @@ const getColumnSuggestions = (containerWidth: number, gapSize = 8) =>
   }));
 
 const PlaceholderSymbol = Symbol('placeholder');
+
+/**
+ * Threshold for the number of chart cards above which:
+ * 1. Virtualization is enabled (only visible rows are rendered to the DOM)
+ * 2. The "hide empty charts" filter is skipped to avoid expensive per-card predicate scans
+ */
+const VIRTUALIZATION_THRESHOLD = 50;
+
+/**
+ * Helper to find the nearest scrollable ancestor element for an element.
+ */
+const getScrollParent = (node: HTMLElement | null): HTMLElement | typeof window | null => {
+  if (!node) {
+    return null;
+  }
+  let parent = node.parentElement;
+  while (parent) {
+    const { overflowY } = window.getComputedStyle(parent);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return window;
+};
+
+/**
+ * Helper to calculate the top offset (scrollMargin) of the grid relative to its scroll parent.
+ */
+const getScrollMargin = (gridEl: HTMLElement | null, scrollEl: HTMLElement | typeof window | null): number => {
+  if (!gridEl || !scrollEl || scrollEl === window) {
+    if (gridEl && scrollEl === window) {
+      const rect = gridEl.getBoundingClientRect();
+      return Math.max(0, rect.top + (window.scrollY || window.pageYOffset || 0));
+    }
+    return 0;
+  }
+  const scrollElement = scrollEl as HTMLElement;
+  const gridRect = gridEl.getBoundingClientRect();
+  const scrollRect = scrollElement.getBoundingClientRect();
+  const margin = gridRect.top - scrollRect.top + scrollElement.scrollTop;
+  return Math.max(0, margin);
+};
 
 interface RunsChartsDraggableCardsGridProps {
   onRemoveChart: (chart: RunsChartsCardConfig) => void;
@@ -132,13 +169,14 @@ export const RunsChartsDraggableCardsGridSection = memo(
     const [positionInSection, setPositionInSection] = useState<number | null>(null);
     const [resizePreview, setResizePreview] = useState<null | Partial<DOMRect>>(null);
 
+    lastElementCount.current = cardsConfig.length;
     const position = !draggedCardUuid ? null : positionInSection;
 
     // Helper function that calculates the x, y coordinates of a card based on its position in the grid
     const findCoords = useCallback(
       (position) => {
         const gap = theme.spacing.sm;
-        const rowCount = Math.ceil(lastElementCount.current / columns);
+        const rowCount = Math.ceil(cardsConfig.length / columns);
 
         const row = Math.floor(position / columns);
         const col = position % columns;
@@ -161,32 +199,20 @@ export const RunsChartsDraggableCardsGridSection = memo(
           y: row * cardHeight + passedRowGaps * gap,
         };
       },
-      [columns, cardHeight, theme],
+      [columns, cardHeight, theme, cardsConfig.length],
     );
 
-    const allFilteredCards = useMemo(() => {
-      const isEmptyChartCard = createEmptyChartCardPredicate(chartRunData);
-      return cardsConfig.filter((cardConfig) => {
-        if (!hideEmptyCharts) {
-          return true;
-        }
-        return !isEmptyChartCard(cardConfig);
-      });
-    }, [cardsConfig, chartRunData, hideEmptyCharts]);
-
-    const [visibleCount, setVisibleCount] = useState(CHARTS_PER_PAGE);
-    // Reset pagination when the filtered card list changes (e.g., switching experiments
-    // or filters). Keying off the array reference catches changes that preserve length,
-    // such as switching to a same-sized set of different metrics.
-    useEffect(() => {
-      setVisibleCount(CHARTS_PER_PAGE);
-    }, [allFilteredCards]);
     const cardsToRender = useMemo(() => {
-      return allFilteredCards.slice(0, visibleCount);
-    }, [allFilteredCards, visibleCount]);
-    lastElementCount.current = cardsToRender.length;
-    const hasMoreCards = allFilteredCards.length > visibleCount;
-    const remainingCards = allFilteredCards.length - visibleCount;
+      // Skip the expensive empty-chart filtering when the card count exceeds
+      // the virtualization threshold. At that scale the per-card predicate scan
+      // (which walks every visible run's metric data) becomes a major bottleneck
+      // and compounds the rendering cost.
+      if (!hideEmptyCharts || cardsConfig.length > VIRTUALIZATION_THRESHOLD) {
+        return cardsConfig;
+      }
+      const isEmptyChartCard = createEmptyChartCardPredicate(chartRunData);
+      return cardsConfig.filter((cardConfig) => !isEmptyChartCard(cardConfig));
+    }, [cardsConfig, chartRunData, hideEmptyCharts]);
 
     // Calculate the transforms for each card based on the dragged card and its position.
     const cardTransforms = useMemo(() => {
@@ -329,24 +355,101 @@ export const RunsChartsDraggableCardsGridSection = memo(
       [columnSuggestions],
     );
 
-    return (
-      <>
+    // Determine whether virtualization should be active. Virtualization is
+    // enabled when the card count exceeds the threshold AND no drag/resize
+    // operation is in progress (drag-and-drop requires all cards to be in the
+    // DOM so that position calculations and reorder references remain correct).
+    const isLargeGrid = cardsToRender.length > VIRTUALIZATION_THRESHOLD;
+    const shouldVirtualize = isLargeGrid && !draggedCardUuid && !resizePreview;
+
+    // Group the flat cards list into rows for the virtualizer.
+    // Only perform the O(N) partitioning if we are in the large grid path.
+    const rows = useMemo(() => {
+      if (!isLargeGrid) {
+        return [];
+      }
+      const result: RunsChartsCardConfig[][] = [];
+      for (let i = 0; i < cardsToRender.length; i += columns) {
+        result.push(cardsToRender.slice(i, i + columns));
+      }
+      return result;
+    }, [cardsToRender, columns, isLargeGrid]);
+
+    const gapSize = theme.spacing.sm;
+
+    const getScrollEl = useCallback(() => {
+      const scrollParent = getScrollParent(gridBoxRef.current);
+      return scrollParent instanceof HTMLElement ? scrollParent : null;
+    }, []);
+
+    const rowVirtualizer = useVirtualizer({
+      count: isLargeGrid ? rows.length : 0,
+      getScrollElement: getScrollEl,
+      estimateSize: () => cardHeight + gapSize,
+      overscan: 3,
+      // Only enable when virtualization is active
+      enabled: shouldVirtualize,
+      scrollMargin: gridBoxRef.current ? getScrollMargin(gridBoxRef.current, getScrollParent(gridBoxRef.current)) : 0,
+    });
+
+    // Shared card rendering function used by both virtualized and
+    // non-virtualized paths. `globalIndex` is the card's position in the
+    // flat `cardsToRender` array so that drag-and-drop neighbour references
+    // remain correct.
+    const renderCard = useCallback(
+      (cardConfig: RunsChartsCardConfig, globalIndex: number) => (
+        <RunsChartsDraggableCard
+          key={cardConfig.uuid}
+          uuid={cardConfig.uuid ?? ''}
+          translateBy={cardTransforms[cardConfig.uuid ?? '']}
+          onResizeStart={onResizeStart}
+          onResizeStop={onResizeStop}
+          onResize={onResize}
+          cardConfig={cardConfig}
+          chartRunData={chartRunData}
+          onReorderWith={onSwapCards}
+          index={globalIndex}
+          height={cardHeight}
+          canMoveDown={Boolean(cardsToRender[globalIndex + 1])}
+          canMoveUp={Boolean(cardsToRender[globalIndex - 1])}
+          canMoveToTop={globalIndex > 0}
+          canMoveToBottom={globalIndex < cardsToRender.length - 1}
+          previousChartUuid={cardsToRender[globalIndex - 1]?.uuid}
+          nextChartUuid={cardsToRender[globalIndex + 1]?.uuid}
+          hideEmptyCharts={hideEmptyCharts}
+          firstChartUuid={cardsToRender[0]?.uuid}
+          lastChartUuid={cardsToRender[cardsToRender.length - 1]?.uuid}
+          {...cardProps}
+        />
+      ),
+      [
+        cardTransforms,
+        onResizeStart,
+        onResizeStop,
+        onResize,
+        chartRunData,
+        onSwapCards,
+        cardHeight,
+        cardsToRender,
+        hideEmptyCharts,
+        cardProps,
+      ],
+    );
+
+    // ── Large grid rendering path (with optional virtualization) ────────
+    if (isLargeGrid) {
+      return (
         <div
           ref={gridBoxRef}
-          css={[
-            { position: 'relative' },
-            cardsToRender.length > 0 && {
-              display: 'grid',
-              gap: theme.spacing.sm,
-            },
-          ]}
+          css={{ position: 'relative' }}
           style={{
-            gridTemplateColumns: 'repeat(' + columns + ', 1fr)',
+            // Total height of all rows so the scrollbar of the parent container reflects the full grid size
+            height: rows.length * (cardHeight + gapSize),
             ...(draggedCardUuid && {
               [DRAGGABLE_CARD_TRANSITION_NAME]: 'transform 0.1s',
             }),
           }}
-          data-testid="draggable-chart-cards-grid"
+          data-testid="virtualized-chart-cards-scroll-container"
           onMouseMove={mouseMove}
           onMouseLeave={() => {
             setPositionInSection(null);
@@ -361,77 +464,116 @@ export const RunsChartsDraggableCardsGridSection = memo(
               }}
             />
           )}
-          {cardsToRender.length === 0 && (
-            <div css={{ display: 'flex', justifyContent: 'center', minHeight: 160 }}>
-              <Empty
-                title={
-                  <FormattedMessage
-                    defaultMessage="No charts in this section"
-                    description="Runs compare page > Charts tab > No charts placeholder title"
-                  />
-                }
-                description={
-                  <FormattedMessage
-                    defaultMessage="Click 'Add chart' or drag and drop to add charts here."
-                    description="Runs compare page > Charts tab > No charts placeholder description"
-                  />
-                }
-              />
-            </div>
-          )}
-          {cardsToRender.map((cardConfig, index) => {
-            // Reorder math is computed against the full filtered list (not the paginated slice)
-            // so "move down/to bottom" works across pages, not just within the visible page.
-            const fullIndex = allFilteredCards.indexOf(cardConfig);
-            const previousCard = fullIndex > 0 ? allFilteredCards[fullIndex - 1] : undefined;
-            const nextCard = fullIndex >= 0 ? allFilteredCards[fullIndex + 1] : undefined;
-            return (
-              <RunsChartsDraggableCard
-                key={cardConfig.uuid}
-                uuid={cardConfig.uuid ?? ''}
-                translateBy={cardTransforms[cardConfig.uuid ?? '']}
-                onResizeStart={onResizeStart}
-                onResizeStop={onResizeStop}
-                onResize={onResize}
-                cardConfig={cardConfig}
-                chartRunData={chartRunData}
-                onReorderWith={onSwapCards}
-                index={index}
-                height={cardHeight}
-                canMoveDown={Boolean(nextCard)}
-                canMoveUp={Boolean(previousCard)}
-                canMoveToTop={fullIndex > 0}
-                canMoveToBottom={fullIndex >= 0 && fullIndex < allFilteredCards.length - 1}
-                previousChartUuid={previousCard?.uuid}
-                nextChartUuid={nextCard?.uuid}
-                hideEmptyCharts={hideEmptyCharts}
-                firstChartUuid={allFilteredCards[0]?.uuid}
-                lastChartUuid={allFilteredCards[allFilteredCards.length - 1]?.uuid}
-                {...cardProps}
-              />
-            );
-          })}
+          {shouldVirtualize
+            ? rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowCards = rows[virtualRow.index];
+                const rowStartIndex = virtualRow.index * columns;
+                return (
+                  <div
+                    key={virtualRow.index}
+                    data-testid="virtualized-chart-row"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: virtualRow.size,
+                      transform: `translateY(${virtualRow.start - (rowVirtualizer.options.scrollMargin ?? 0)}px)`,
+                    }}
+                    css={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                      gap: gapSize,
+                    }}
+                  >
+                    {rowCards.map((cardConfig, colIndex) => renderCard(cardConfig, rowStartIndex + colIndex))}
+                  </div>
+                );
+              })
+            : rows.map((rowCards, rowIndex) => {
+                const rowStartIndex = rowIndex * columns;
+                return (
+                  <div
+                    key={rowIndex}
+                    data-testid="virtualized-chart-row"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: cardHeight + gapSize,
+                      transform: `translateY(${rowIndex * (cardHeight + gapSize)}px)`,
+                    }}
+                    css={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                      gap: gapSize,
+                    }}
+                  >
+                    {rowCards.map((cardConfig, colIndex) => renderCard(cardConfig, rowStartIndex + colIndex))}
+                  </div>
+                );
+              })}
           {dragPreview && <RunsChartsDraggablePreview {...dragPreview} />}
           {resizePreview && <RunsChartsDraggablePreview {...resizePreview} />}
         </div>
-        {hasMoreCards && (
-          <div css={showMoreWrapperStyles(theme)}>
-            <Button
-              componentId="mlflow_show_more_charts"
-              onClick={() => setVisibleCount((prev) => prev + CHARTS_PER_PAGE)}
-            >
-              <FormattedMessage
-                defaultMessage="Show {count} more {count, plural, one {chart} other {charts}} ({remaining} remaining)"
-                description="Runs compare page > Charts tab > Show more charts button label"
-                values={{
-                  count: Math.min(remainingCards, CHARTS_PER_PAGE),
-                  remaining: remainingCards,
-                }}
-              />
-            </Button>
+      );
+    }
+
+    // ── Small grid rendering path (original behavior) ───────────────────
+    return (
+      <div
+        ref={gridBoxRef}
+        css={[
+          { position: 'relative' },
+          cardsToRender.length > 0 && {
+            display: 'grid',
+            gap: theme.spacing.sm,
+          },
+        ]}
+        style={{
+          gridTemplateColumns: 'repeat(' + columns + ', 1fr)',
+          ...(draggedCardUuid && {
+            [DRAGGABLE_CARD_TRANSITION_NAME]: 'transform 0.1s',
+          }),
+        }}
+        data-testid="draggable-chart-cards-grid"
+        onMouseMove={mouseMove}
+        onMouseLeave={() => {
+          setPositionInSection(null);
+        }}
+      >
+        {(draggedCardUuid || resizePreview) && (
+          <Global
+            styles={{
+              'body, :host': {
+                userSelect: 'none',
+              },
+            }}
+          />
+        )}
+        {cardsToRender.length === 0 && (
+          <div css={{ display: 'flex', justifyContent: 'center', minHeight: 160 }}>
+            <Empty
+              title={
+                <FormattedMessage
+                  defaultMessage="No charts in this section"
+                  description="Runs compare page > Charts tab > No charts placeholder title"
+                />
+              }
+              description={
+                <FormattedMessage
+                  defaultMessage="Click 'Add chart' or drag and drop to add charts here."
+                  description="Runs compare page > Charts tab > No charts placeholder description"
+                />
+              }
+            />
           </div>
         )}
-      </>
+        {cardsToRender.map((cardConfig, index) => renderCard(cardConfig, index))}
+        {dragPreview && <RunsChartsDraggablePreview {...dragPreview} />}
+        {resizePreview && <RunsChartsDraggablePreview {...resizePreview} />}
+      </div>
     );
   },
 );
