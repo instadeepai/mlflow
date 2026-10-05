@@ -53,8 +53,16 @@ export const useSaveExperimentRunColor = () => {
       if (groupUuid) {
         const colors = loadSavedColors();
         colors[groupUuid] = colorValue;
-        // eslint-disable-next-line @databricks/no-direct-storage -- go/no-direct-storage
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
+        try {
+          // eslint-disable-next-line @databricks/no-direct-storage -- go/no-direct-storage
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
+        } catch (e) {
+          if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
+            console.warn('localStorage quota exceeded — run colors will not be persisted');
+          } else {
+            throw e;
+          }
+        }
       }
     },
     [dispatch],
