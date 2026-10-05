@@ -7083,6 +7083,10 @@
     "defaultMessage": "Group traces from the same chat session together",
     "description": "Empty state title for the chat sessions table"
   },
+  "QuKu0y": {
+    "defaultMessage": "Show {count} more {count, plural, one {section} other {sections}} ({remaining} remaining)",
+    "description": "Experiment page > compare runs > chart section accordion > show more sections button"
+  },
   "QuU1sl": {
     "defaultMessage": "Parallel Coordinates Plot",
     "description": "Tab text for parallel coordinates plot on the model comparison page"
